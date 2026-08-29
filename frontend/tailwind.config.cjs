@@ -1,0 +1,66 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  darkMode: 'class',
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        // Judge OS palette: white canvas, hairline greys, emerald accent.
+        background: '#ffffff',
+        surface: '#ffffff',
+        'surface-1': '#fafafa',
+        'surface-2': '#f4f4f5',
+        border: '#e5e5e5',
+        'border-strong': '#d4d4d8',
+        muted: '#737373',
+        'on-surface': '#0a0a0a',
+        'on-surface-variant': '#525252',
+        primary: '#10b981',
+        'on-primary': '#ffffff',
+        'primary-dim': '#d1fae5',
+        danger: '#ef4444',
+        'on-danger': '#ffffff',
+        warning: '#f59e0b',
+        info: '#3b82f6',
+      },
+      borderRadius: {
+        none: '0',
+        DEFAULT: '0',
+        sm: '0',
+        md: '0',
+        lg: '0',
+        xl: '0',
+        '2xl': '0',
+        full: '9999px',
+      },
+      spacing: {
+        gutter: '24px',
+        'margin-sm': '16px',
+        'margin-md': '32px',
+        'margin-lg': '48px',
+      },
+      fontFamily: {
+        display: ['Inter', 'system-ui', 'sans-serif'],
+        body: ['Inter', 'system-ui', 'sans-serif'],
+        label: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        'session-code': ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+      },
+      fontSize: {
+        display: ['2rem', { lineHeight: '1.15', letterSpacing: '-0.02em', fontWeight: '700' }],
+        'display-sm': ['1.5rem', { lineHeight: '1.2', letterSpacing: '-0.01em', fontWeight: '700' }],
+        h1: ['1.25rem', { lineHeight: '1.3', fontWeight: '600' }],
+        h2: ['1.125rem', { lineHeight: '1.4', fontWeight: '600' }],
+        body: ['0.9375rem', { lineHeight: '1.5', fontWeight: '400' }],
+        label: ['0.8125rem', { lineHeight: '1.2', fontWeight: '500' }],
+        micro: ['0.6875rem', { lineHeight: '1.1', fontWeight: '500', letterSpacing: '0.05em' }],
+        'session-code': ['1.5rem', { lineHeight: '1', letterSpacing: '0.18em', fontWeight: '700' }],
+      },
+      boxShadow: {
+        none: 'none',
+        hairline: '0 0 0 1px #e5e5e5',
+      },
+    },
+  },
+  plugins: [],
+};

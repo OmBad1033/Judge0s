@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "live-feedback-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+
+  "assets": {
+    "directory": "../frontend/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "live-feedback-db",
+      "database_id": "59477104-abd5-4b40-ae7a-8c62384d53c2",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "PRESENTATION_BUCKET",
+      "bucket_name": "live-feedback-presentations"
+    }
+  ],
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PRESENTATION_SESSION",
+        "class_name": "PresentationSession"
+      }
+    ]
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["PresentationSession"]
+    }
+  ]
+}

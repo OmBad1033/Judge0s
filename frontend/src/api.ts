@@ -1,0 +1,120 @@
+import type {
+  Presentation,
+  SlidesResponse,
+  Session,
+  JoinResponse,
+  StoredResponse,
+  StoredDefaultResponse,
+  SlideEvent,
+  ExportData,
+  FeedbackType,
+  PresentationSummary,
+  ParticipantState,
+  ControlState,
+  DefaultQuestion,
+  DefaultQuestionType,
+} from './types';
+
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+async function json<T>(path: string, method: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    let parsed: unknown = null;
+    try {
+      parsed = await res.json();
+    } catch {
+      parsed = res.statusText;
+    }
+    const msg =
+      typeof parsed === 'object' && parsed && 'error' in parsed
+        ? String((parsed as { error: unknown }).error)
+        : res.statusText;
+    throw new ApiError(msg, res.status, parsed);
+  }
+  return res.json() as Promise<T>;
+}
+
+export interface PutSlideBody {
+  title?: string;
+  summary: string;
+  feedbackRule: {
+    enabled: boolean;
+    required: boolean;
+    feedbackType: FeedbackType;
+    question?: string;
+    options?: string[];
+    allowResubmission: boolean;
+  };
+}
+
+export const api = {
+  adminLogin: (password: string) => json<{ ok: boolean }>('/api/admin/login', 'POST', { password }),
+  adminMe: () => json<{ ok: boolean }>('/api/admin/me', 'GET'),
+  adminLogout: () => json<{ ok: boolean }>('/api/admin/logout', 'POST'),
+
+  createPresentation: (data: { title: string; slideCount: number; file: File }) => {
+    const form = new FormData();
+    form.append('title', data.title);
+    form.append('slideCount', String(data.slideCount));
+    form.append('file', data.file);
+    return fetch('/api/presentations', { method: 'POST', credentials: 'include', body: form }).then(
+      async (r) => {
+        if (!r.ok) throw new ApiError((await r.json().catch(() => ({}))).error ?? 'upload failed', r.status, null);
+        return r.json() as Promise<Presentation>;
+      },
+    );
+  },
+  getPresentation: (id: string) => json<Presentation>(`/api/presentations/${id}`, 'GET'),
+  listPresentations: () => json<{ presentations: PresentationSummary[] }>(`/api/presentations`, 'GET'),
+  listSlides: (id: string) => json<SlidesResponse>(`/api/presentations/${id}/slides`, 'GET'),
+  putSlide: (id: string, slideNumber: number, body: PutSlideBody) =>
+    json(`/api/presentations/${id}/slides/${slideNumber}`, 'PUT', body),
+  listDefaultQuestions: (id: string) =>
+    json<{ defaultQuestions: DefaultQuestion[] }>(`/api/presentations/${id}/default-questions`, 'GET'),
+  createDefaultQuestion: (
+    id: string,
+    data: { questionText: string; questionType: DefaultQuestionType; targetSlides: number[] },
+  ) => json<DefaultQuestion>(`/api/presentations/${id}/default-questions`, 'POST', data),
+  deleteDefaultQuestion: (id: string, questionId: string) =>
+    json<{ ok: boolean }>(`/api/presentations/${id}/default-questions/${questionId}`, 'DELETE'),
+
+  createSession: (presentationId: string) =>
+    json<Session>('/api/sessions', 'POST', { presentationId }),
+  listSessions: (presentationId: string) =>
+    json<{ sessions: Session[] }>(`/api/sessions?presentationId=${encodeURIComponent(presentationId)}`, 'GET'),
+  getSession: (code: string) => json<Session>(`/api/sessions/${code}`, 'GET'),
+  startSession: (code: string) => json<Session>(`/api/sessions/${code}/start`, 'POST'),
+  changeSlide: (code: string, slideNumber: number) =>
+    json<Session>(`/api/sessions/${code}/slide`, 'PATCH', { slideNumber }),
+  endSession: (code: string) => json<Session>(`/api/sessions/${code}/end`, 'POST'),
+  currentSlide: (code: string) => json<SlideEvent>(`/api/sessions/${code}/current-slide`, 'GET'),
+  participantState: (code: string, participantId: string) =>
+    json<ParticipantState>(`/api/sessions/${code}/participant-state?participantId=${encodeURIComponent(participantId)}`, 'GET'),
+  controlState: (code: string) => json<ControlState>(`/api/sessions/${code}/control-state`, 'GET'),
+  exportSession: (code: string) => json<ExportData>(`/api/sessions/${code}/export`, 'GET'),
+
+  joinSession: (code: string, name: string, email: string) =>
+    json<JoinResponse>(`/api/sessions/${code}/join`, 'POST', { name, email }),
+  submitFeedback: (code: string, participantId: string, slideNumber: number, response: string) =>
+    json<StoredResponse>(`/api/sessions/${code}/feedback`, 'POST', { participantId, slideNumber, response }),
+  getMyFeedback: (code: string, participantId: string) =>
+    json<{ responses: StoredResponse[] }>(`/api/sessions/${code}/feedback/me?participantId=${encodeURIComponent(participantId)}`, 'GET'),
+  submitDefaultFeedback: (code: string, participantId: string, defaultQuestionId: string, slideNumber: number, response: string) =>
+    json<StoredDefaultResponse>(`/api/sessions/${code}/feedback/default`, 'POST', { participantId, defaultQuestionId, slideNumber, response }),
+  getMyDefaultFeedback: (code: string, participantId: string) =>
+    json<{ responses: StoredDefaultResponse[] }>(`/api/sessions/${code}/default-feedback/me?participantId=${encodeURIComponent(participantId)}`, 'GET'),
+};

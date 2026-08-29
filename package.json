@@ -1,0 +1,17 @@
+{
+  "name": "live-feedback",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Live Presentation Feedback System — Cloudflare POC",
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "dev:worker": "pnpm --filter worker dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "typecheck": "pnpm -r run typecheck",
+    "build": "pnpm -r run build"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

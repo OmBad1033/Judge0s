@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-on-surface font-body;
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .font-mono,
+  .font-session-code {
+    font-feature-settings: 'tnum' 1;
+  }
+}
+
+@layer components {
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-weight: normal;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    -webkit-font-feature-settings: 'liga';
+  }
+  .material-symbols-outlined.fill {
+    font-variation-settings: 'FILL' 1;
+  }
+
+  /* 1px dot-grid backdrop used by all Judge OS pages. */
+  .dot-grid {
+    background-color: #ffffff;
+    background-image: radial-gradient(#d4d4d8 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-position: -1px -1px;
+  }
+  .dot-grid-tight {
+    background-color: #ffffff;
+    background-image: radial-gradient(#e5e5e5 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+
+  /* Bracket-style mono section labels: [LIVE_EXECUTOR] */
+  .term-label {
+    @apply font-mono text-micro uppercase tracking-[0.18em] text-muted;
+  }
+  .term-label-strong {
+    @apply font-mono text-micro uppercase tracking-[0.18em] text-on-surface;
+  }
+
+  /* Standard Judge OS card: hairline border, no radius, no shadow. */
+  .term-card {
+    @apply bg-surface border border-border;
+  }
+
+  /* Mono input field. */
+  .term-input {
+    @apply w-full bg-surface border border-border font-mono text-body text-on-surface
+           placeholder:text-muted/60
+           focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary;
+  }
+
+  /* Primary Judge OS button: sharp emerald. */
+  .term-button-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-primary text-on-primary
+           font-mono text-label uppercase tracking-[0.15em] px-5 py-2.5
+           hover:brightness-110 active:brightness-95
+           disabled:opacity-60 disabled:cursor-not-allowed transition;
+  }
+  .term-button-secondary {
+    @apply inline-flex items-center justify-center gap-2 bg-surface border border-border
+           text-on-surface font-mono text-label uppercase tracking-[0.15em] px-5 py-2.5
+           hover:border-primary hover:text-primary
+           disabled:opacity-60 disabled:cursor-not-allowed transition;
+  }
+  .term-button-ghost {
+    @apply inline-flex items-center justify-center gap-2 font-mono text-label uppercase
+           tracking-[0.15em] text-muted hover:text-on-surface px-2 py-1 transition;
+  }
+  .term-button-danger {
+    @apply inline-flex items-center justify-center gap-2 bg-danger text-on-danger
+           font-mono text-label uppercase tracking-[0.15em] px-5 py-2.5
+           hover:brightness-110 disabled:opacity-60 transition;
+  }
+
+  /* Status pills (Draft / Live / Ended). */
+  .status-pill {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1
+           font-mono text-micro uppercase tracking-[0.18em] border;
+  }
+  .status-pill-draft {
+    @apply border-border text-muted bg-surface-1;
+  }
+  .status-pill-live {
+    @apply border-primary text-primary bg-primary-dim;
+  }
+  .status-pill-ended {
+    @apply border-danger text-danger bg-[#fef2f2];
+  }
+
+  .term-divider {
+    @apply h-px bg-border w-full;
+  }
+
+  .term-table-row {
+    @apply border-t border-border hover:border-l-2 hover:border-l-primary
+           hover:bg-surface-1 transition-colors;
+  }
+
+  /* Animated cursor dot for terminal loaders. */
+  .cursor-blink {
+    animation: cursorBlink 1s steps(2, start) infinite;
+  }
+  @keyframes cursorBlink {
+    to { visibility: hidden; }
+  }
+  /* Pulsing emerald dot for live status. */
+  .pulse-emerald {
+    animation: pulseEmerald 1.4s ease-in-out infinite;
+  }
+  @keyframes pulseEmerald {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+  .scan-sweep {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(16, 185, 129, 0.4) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: scanSweep 3s linear infinite;
+  }
+  @keyframes scanSweep {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
