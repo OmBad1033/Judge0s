@@ -1,3 +1,13 @@
 ADMIN_PASSWORD=change-me
 SESSION_SECRET=generate-a-random-secret
 ENVIRONMENT=local
+
+# Phase 1 — Google OAuth (leave blank to disable /api/auth/google/*)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:8787/api/auth/google/callback
+SUPER_ADMIN_EMAILS=admin@local
+JWT_SECRET=another-random-secret
+
+# Phase 8 — comma-separated allowlist; defaults to local Vite origin
+ORIGIN_ALLOWLIST=http://localhost:5173

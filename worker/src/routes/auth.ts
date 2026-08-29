@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { setCookie, deleteCookie } from 'hono/cookie';
 import type { Env } from '../env';
-import { adminGuard, signToken } from '../utils/auth';
+import { adminGuard, signToken, currentUser } from '../utils/auth';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -29,6 +29,27 @@ app.post('/logout', (c) => {
   return c.json({ ok: true });
 });
 
-app.get('/me', adminGuard, (c) => c.json({ ok: true, role: 'admin' }));
+app.get('/me', adminGuard, async (c) => {
+  // legacy admin /me — kept for the current frontend.
+  return c.json({ ok: true, role: 'admin' });
+});
+
+// Phase 1 — the same /me endpoint also accepts a Google JWT so the frontend
+// can transition to OAuth without an API surface change.
+app.get('/me-or-user', adminGuard, async (c) => {
+  const u = await currentUser(c);
+  if (!u) return c.json({ error: 'UNAUTHORIZED' }, 401);
+  return c.json({
+    ok: true,
+    role: u.authMethod === 'legacy_admin_cookie' ? 'admin' : 'user',
+    user: {
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      avatarUrl: u.avatarUrl,
+      isSuperAdmin: u.isSuperAdmin,
+    },
+  });
+});
 
 export default app;

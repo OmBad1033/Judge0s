@@ -31,7 +31,7 @@
     "bindings": [
       {
         "name": "PRESENTATION_SESSION",
-        "class_name": "PresentationSession"
+        "class_name": "SessionRoom"
       }
     ]
   },
@@ -39,7 +39,7 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["PresentationSession"]
+      "new_sqlite_classes": ["SessionRoom"]
     }
   ]
 }
