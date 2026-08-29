@@ -69,7 +69,7 @@ export interface Session {
   id: string;
   presentationId: string;
   sessionCode: string;
-  status: 'draft' | 'live' | 'ended';
+  status: 'draft' | 'live' | 'paused' | 'ended';
   currentSlideNumber: number | null;
   createdAt: string;
   startedAt: string | null;
@@ -182,3 +182,46 @@ export interface ControlState {
   responseCount: number;
   currentSlideResponseCount: number;
 }
+
+// FR-1 — Deep-link-friendly session lookup.
+export interface JoinInfo {
+  sessionCode: string;
+  status: 'draft' | 'live' | 'ended';
+  presentationTitle: string;
+  joinable: boolean;
+  reason: 'ENDED' | 'NOT_FOUND' | null;
+}
+
+// FR-3 — Extended live-stats broadcast (additive on top of SessionStatsEvent).
+export interface SessionStatsEventV2 {
+  type: 'SESSION_STATS_UPDATED';
+  participantCount: number;
+  currentSlideResponseCount: number;
+  totalResponseCount?: number;
+  currentSlide?: {
+    slideNumber: number;
+    fieldBreakdown: Array<
+      | { fieldId: string; feedbackType: 'boolean' | 'multiple_choice' | 'open_text'; counts: Record<string, number> }
+      | { fieldId: string; questionType: 'interested' | 'rating'; average: number; count: number }
+    >;
+  };
+}
+
+// FR-5 — Real participant list (replaces the deterministic mock in lib/mockParticipants.ts).
+export interface SessionParticipant {
+  id: string;
+  name: string;
+  joinedAt: string;
+  lastSeenAt: string | null;
+  hasCurrentSlideResponse: boolean;
+  totalResponses: number;
+}
+
+// FR-2 — Extended participant-state shape (additive — older fields stay).
+export interface PreviousSlideMarker {
+  slideNumber: number;
+  hasResponse: boolean;
+}
+
+// Shared connection-state vocabulary used by both the participant and the admin live control room.
+export type ConnectionState = 'connected' | 'reconnecting' | 'disconnected' | 'ended';

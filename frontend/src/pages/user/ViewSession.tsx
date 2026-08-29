@@ -2,9 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api';
 import { usePresentationSocket } from '../../usePresentationSocket';
-import type { SlideEvent, SlideEventRule, StoredResponse, StoredDefaultResponse, ParticipantState } from '../../types';
+import type {
+  SlideEvent,
+  SlideEventRule,
+  StoredResponse,
+  StoredDefaultResponse,
+  ParticipantState,
+  ConnectionState,
+} from '../../types';
 import FeedbackForm from '../../components/FeedbackForm';
 import DefaultQuestionForm from '../../components/DefaultQuestionForm';
+import ConnectionStatus from '../../components/ConnectionStatus';
+import Skeleton from '../../components/Skeleton';
 
 const ERR_MSG: Record<string, string> = {
   RESUBMISSION_NOT_ALLOWED: "You can't change your response for this slide.",
@@ -25,35 +34,40 @@ const mapErr = (e: unknown) => {
 // Page 2 of the participation flow: the in-session view that shows the
 // active slide, configured feedback form, any default questions, and a
 // single submit button that saves everything together (per project taste).
+// Mobile-first — submit button is bottom-anchored with a safe-area inset
+// so it's reachable with a thumb and survives the iOS home-indicator.
 export default function ViewSession() {
   const { code } = useParams();
   const navigate = useNavigate();
   const [pid, setPid] = useState<string | null>(null);
   const [boot, setBoot] = useState<ParticipantState | null>(null);
+  const [bootError, setBootError] = useState<string | null>(null);
   const [responses, setResponses] = useState<StoredResponse[]>([]);
   const [defaultResponses, setDefaultResponses] = useState<StoredDefaultResponse[]>([]);
   const { event: wsEvent, connected } = usePresentationSocket(code);
 
   const [slideValue, setSlideValue] = useState('');
   const [defaultValues, setDefaultValues] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<{ kind: 'idle' | 'ok' | 'error' | 'submitting'; message?: string }>({ kind: 'idle' });
+  const [status, setStatus] = useState<{ kind: 'idle' | 'ok' | 'error' | 'submitting'; message?: string }>({
+    kind: 'idle',
+  });
 
   const bootstrap = useCallback(async () => {
     if (!code) return;
     const stored = localStorage.getItem('participant');
     if (!stored) {
-      navigate(`/join?code=${code}`);
+      navigate(`/join/${encodeURIComponent(code)}`);
       return;
     }
     let p: { participantId: string; code: string };
     try {
       p = JSON.parse(stored);
     } catch {
-      navigate(`/join?code=${code}`);
+      navigate(`/join/${encodeURIComponent(code)}`);
       return;
     }
     if (p.code !== code) {
-      navigate(`/join?code=${code}`);
+      navigate(`/join/${encodeURIComponent(code)}`);
       return;
     }
     setPid(p.participantId);
@@ -62,20 +76,24 @@ export default function ViewSession() {
       setBoot(state);
       setResponses(state.responses);
       setDefaultResponses(state.defaultResponses);
+      setBootError(null);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 404) navigate(`/join?code=${code}`);
+      if (e instanceof ApiError && e.status === 404) navigate(`/join/${encodeURIComponent(code)}`);
+      else setBootError(mapErr(e));
     }
   }, [code, navigate]);
+
   useEffect(() => {
     bootstrap();
   }, [bootstrap]);
 
   const event: SlideEvent | null = wsEvent ?? boot?.event ?? null;
   const sessionStatus = boot?.session.status ?? null;
-  const slideNumber = event?.type === 'SLIDE_CHANGED' ? event.slideNumber : boot?.session.currentSlideNumber ?? null;
+  const slideNumber =
+    event?.type === 'SLIDE_CHANGED' ? event.slideNumber : boot?.session.currentSlideNumber ?? null;
   const rule: SlideEventRule | null = event?.type === 'SLIDE_CHANGED' ? (event.feedbackRule ?? null) : null;
   const defaultQuestions = event?.type === 'SLIDE_CHANGED' ? (event.defaultQuestions ?? []) : [];
-  const existing = slideNumber != null ? responses.find((r) => r.slideNumber === slideNumber) ?? null : null;
+  const existing = slideNumber != null ? (responses.find((r) => r.slideNumber === slideNumber) ?? null) : null;
   const locked = !!existing && !(rule?.allowResubmission ?? false);
 
   useEffect(() => {
@@ -84,7 +102,9 @@ export default function ViewSession() {
     setSlideValue(ex?.responseValue ?? '');
     const dvs: Record<string, string> = {};
     for (const dq of defaultQuestions) {
-      const dr = defaultResponses.find((r) => r.defaultQuestionId === dq.id && r.slideNumber === slideNumber);
+      const dr = defaultResponses.find(
+        (r) => r.defaultQuestionId === dq.id && r.slideNumber === slideNumber,
+      );
       dvs[dq.id] = dr?.responseValue ?? '';
     }
     setDefaultValues(dvs);
@@ -107,7 +127,11 @@ export default function ViewSession() {
     if (slideSubmittable) {
       try {
         const res = await api.submitFeedback(code, pid, slideNumber, slideValue);
-        setResponses((rs) => [...rs.filter((r) => r.slideNumber !== slideNumber), res].sort((a, b) => a.slideNumber - b.slideNumber));
+        setResponses((rs) =>
+          [...rs.filter((r) => r.slideNumber !== slideNumber), res].sort(
+            (a, b) => a.slideNumber - b.slideNumber,
+          ),
+        );
       } catch (e) {
         errs.push(mapErr(e));
       }
@@ -118,7 +142,12 @@ export default function ViewSession() {
       if (!v) continue;
       try {
         const res = await api.submitDefaultFeedback(code, pid, dq.id, slideNumber, v);
-        setDefaultResponses((rs) => [...rs.filter((r) => !(r.defaultQuestionId === dq.id && r.slideNumber === slideNumber)), res]);
+        setDefaultResponses((rs) =>
+          [
+            ...rs.filter((r) => !(r.defaultQuestionId === dq.id && r.slideNumber === slideNumber)),
+            res,
+          ],
+        );
       } catch (e) {
         errs.push(mapErr(e));
       }
@@ -131,56 +160,65 @@ export default function ViewSession() {
     }
   };
 
-  if (!event) {
+  const connectionState: ConnectionState = ended ? 'ended' : connected ? 'connected' : 'reconnecting';
+
+  // Connecting state — neither the REST bootstrap nor the WS handshake has data yet.
+  if (!event && !bootError) {
     return (
-      <div className="min-h-screen dot-grid flex items-center justify-center text-on-surface font-mono gap-2 text-label uppercase tracking-[0.15em]">
-        <span className="text-primary">{'>'}</span>
-        <span>Connecting</span>
-        <span className="cursor-blink">_</span>
+      <div className="dot-grid min-h-screen text-on-surface font-body">
+        <main className="w-full max-w-md mx-auto min-h-screen flex flex-col px-4 pt-6 pb-8 gap-4">
+          <Skeleton variant="card" />
+          <Skeleton variant="card" rows={3} />
+          <Skeleton variant="text" rows={2} />
+        </main>
       </div>
     );
   }
 
   return (
     <div className="dot-grid min-h-screen text-on-surface font-body relative">
-      {!connected && (
-        <div className="fixed top-0 left-0 w-full z-50 bg-danger text-on-danger flex justify-center items-center py-2 px-4 gap-2 font-mono text-micro uppercase tracking-[0.18em]">
-          <span className="material-symbols-outlined text-[16px]">wifi_tethering_error</span>
-          <span>{'>'} Ws_Link:Down — Reconnecting</span>
+      {/* Reconnecting / status banner — non-blocking, slides under the safe area. */}
+      <div
+        className={`sticky top-0 z-40 ${
+          connectionState === 'reconnecting' ? 'bg-warning text-on-primary' : 'hidden'
+        }`}
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex justify-center items-center py-1.5 px-4 gap-2 font-mono text-micro uppercase tracking-[0.18em] text-on-surface">
+          <span className="material-symbols-outlined text-[14px]">wifi_tethering_error</span>
+          <span>{'>'} Reconnecting — Your responses are safe</span>
         </div>
-      )}
+      </div>
 
-      <main className="w-full max-w-md mx-auto min-h-screen flex flex-col px-4 pt-4 pb-8 gap-4">
+      <main className="w-full max-w-md mx-auto min-h-screen flex flex-col px-4 pt-4 pb-32 gap-4">
         {/* Top status strip */}
         <header className="flex items-center justify-between border border-border bg-surface px-3 py-2">
           <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
             [Session_Id: {code}]
           </span>
-          <span
-            className={`flex items-center gap-1.5 font-mono text-micro uppercase tracking-[0.18em] px-2 py-0.5 border ${
-              ended
-                ? 'border-danger text-danger bg-[#fef2f2]'
-                : connected
-                  ? 'border-primary text-primary bg-primary-dim'
-                  : 'border-warning text-warning'
-            }`}
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full inline-block ${
-                ended ? 'bg-danger' : connected ? 'bg-primary pulse-emerald' : 'bg-warning pulse-emerald'
-              }`}
-            />
-            {ended ? 'Ended' : connected ? 'Live' : 'Reconnecting'}
-          </span>
+          <ConnectionStatus state={connectionState} />
         </header>
 
         {/* Slide badge */}
         <div className="border border-border bg-surface px-3 py-2 flex items-center justify-between">
-          <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">[Active_Slide]</span>
+          <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+            [Active_Slide]
+          </span>
           <span className="font-mono text-h1 text-on-surface">
             {String(slideNumber ?? '—').padStart(2, '0')}
           </span>
         </div>
+
+        {bootError && !ended && (
+          <div className="border border-warning bg-[#fef3c7] px-3 py-2 flex items-start gap-2 text-warning">
+            <span className="material-symbols-outlined text-[18px]">sync_problem</span>
+            <div className="flex flex-col">
+              <span className="font-mono text-micro uppercase tracking-[0.15em]">Couldn't load session state</span>
+              <span className="font-body text-body">{bootError}</span>
+            </div>
+          </div>
+        )}
 
         {ended && (
           <section className="border border-border bg-surface p-6 flex flex-col items-center justify-center text-center gap-3">
@@ -218,7 +256,9 @@ export default function ViewSession() {
             {/* Slide card */}
             <div className="border border-border bg-surface">
               <div className="border-b border-border px-4 py-2">
-                <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">[Query_Data]</span>
+                <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                  [Query_Data]
+                </span>
               </div>
               <div className="px-4 py-4">
                 {hasContent ? (
@@ -246,12 +286,13 @@ export default function ViewSession() {
             </div>
 
             {/* Slide feedback form */}
-            {rule?.enabled && rule.type !== 'disabled' && (
-              locked ? (
+            {rule?.enabled && rule.type !== 'disabled' &&
+              (locked ? (
                 <div className="border border-border bg-surface p-6 flex flex-col items-center justify-center text-center gap-2">
                   <span className="material-symbols-outlined text-3xl text-primary">check_circle</span>
                   <p className="font-mono text-body text-on-surface">
-                    You answered: <span className="font-medium capitalize">{existing?.responseValue ?? '—'}</span>
+                    You answered:{' '}
+                    <span className="font-medium capitalize">{existing?.responseValue ?? '—'}</span>
                   </p>
                   <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
                     {'>'} This slide does not allow changes.
@@ -259,8 +300,7 @@ export default function ViewSession() {
                 </div>
               ) : (
                 <FeedbackForm rule={rule} value={slideValue} onChange={setSlideValue} />
-              )
-            )}
+              ))}
 
             {/* Default questions */}
             {defaultQuestions.map((dq) => (
@@ -272,44 +312,51 @@ export default function ViewSession() {
               />
             ))}
 
-            {/* Submit */}
-            {canSubmit && (
-              <div className="flex flex-col gap-2 mt-2">
-                <button
-                  onClick={submitAll}
-                  disabled={status.kind === 'submitting'}
-                  className="term-button-primary w-full !py-3.5"
-                >
-                  {status.kind === 'submitting' ? (
-                    <>
-                      <span>{'>'}</span>
-                      Submitting
-                      <span className="cursor-blink">_</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Submit_Response</span>
-                      <span className="material-symbols-outlined text-[18px]">send</span>
-                    </>
-                  )}
-                </button>
-                {status.kind === 'ok' && (
-                  <p className="flex items-center gap-1 font-mono text-micro uppercase tracking-[0.15em] text-primary">
-                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                    {'>'} {status.message}
-                  </p>
-                )}
-                {status.kind === 'error' && (
-                  <p className="flex items-center gap-1 font-mono text-micro uppercase tracking-[0.15em] text-danger">
-                    <span className="material-symbols-outlined text-[16px]">error</span>
-                    {'>'} {status.message}
-                  </p>
-                )}
-              </div>
+            {/* Status messages — above the bottom-anchored submit so users see the result without scrolling. */}
+            {status.kind === 'ok' && (
+              <p className="flex items-center gap-1 font-mono text-micro uppercase tracking-[0.15em] text-primary">
+                <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                {'>'} {status.message}
+              </p>
+            )}
+            {status.kind === 'error' && (
+              <p className="flex items-center gap-1 font-mono text-micro uppercase tracking-[0.15em] text-danger">
+                <span className="material-symbols-outlined text-[16px]">error</span>
+                {'>'} {status.message}
+              </p>
             )}
           </section>
         )}
       </main>
+
+      {/* Bottom-anchored submit bar (mobile-first). Stays out of the way until the slide is submittable. */}
+      {active && !ended && canSubmit && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 pt-3"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
+        >
+          <div className="max-w-md mx-auto">
+            <button
+              onClick={submitAll}
+              disabled={status.kind === 'submitting'}
+              className="term-button-primary w-full !py-3.5 min-h-[48px]"
+            >
+              {status.kind === 'submitting' ? (
+                <>
+                  <span>{'>'}</span>
+                  Submitting
+                  <span className="cursor-blink">_</span>
+                </>
+              ) : (
+                <>
+                  <span>Submit_Response</span>
+                  <span className="material-symbols-outlined text-[18px]">send</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

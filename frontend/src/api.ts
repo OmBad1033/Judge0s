@@ -13,6 +13,9 @@ import type {
   ControlState,
   DefaultQuestion,
   DefaultQuestionType,
+  JoinInfo,
+  SessionStatsEventV2,
+  SessionParticipant,
 } from './types';
 
 export class ApiError extends Error {
@@ -102,13 +105,19 @@ export const api = {
     json<Session>(`/api/sessions/${code}/slide`, 'PATCH', { slideNumber }),
   endSession: (code: string) => json<Session>(`/api/sessions/${code}/end`, 'POST'),
   currentSlide: (code: string) => json<SlideEvent>(`/api/sessions/${code}/current-slide`, 'GET'),
-  participantState: (code: string, participantId: string) =>
-    json<ParticipantState>(`/api/sessions/${code}/participant-state?participantId=${encodeURIComponent(participantId)}`, 'GET'),
   controlState: (code: string) => json<ControlState>(`/api/sessions/${code}/control-state`, 'GET'),
   exportSession: (code: string) => json<ExportData>(`/api/sessions/${code}/export`, 'GET'),
 
+  // FR-1 — Deep-link-friendly session lookup. Returns 404 if session does not exist.
+  getJoinInfo: (code: string) => json<JoinInfo>(`/api/sessions/${code}/join-info`, 'GET'),
+
+  // FR-2 — Extended participant-state (additive; older fields stay).
+  participantState: (code: string, participantId: string) =>
+    json<ParticipantState>(`/api/sessions/${code}/participant-state?participantId=${encodeURIComponent(participantId)}`, 'GET'),
+
   joinSession: (code: string, name: string, email: string) =>
     json<JoinResponse>(`/api/sessions/${code}/join`, 'POST', { name, email }),
+
   submitFeedback: (code: string, participantId: string, slideNumber: number, response: string) =>
     json<StoredResponse>(`/api/sessions/${code}/feedback`, 'POST', { participantId, slideNumber, response }),
   getMyFeedback: (code: string, participantId: string) =>
@@ -117,4 +126,18 @@ export const api = {
     json<StoredDefaultResponse>(`/api/sessions/${code}/feedback/default`, 'POST', { participantId, defaultQuestionId, slideNumber, response }),
   getMyDefaultFeedback: (code: string, participantId: string) =>
     json<{ responses: StoredDefaultResponse[] }>(`/api/sessions/${code}/default-feedback/me?participantId=${encodeURIComponent(participantId)}`, 'GET'),
+
+  // FR-4 — Pause / resume the live session (admin).
+  pauseSession: (code: string) => json<Session>(`/api/sessions/${code}/pause`, 'POST'),
+  resumeSession: (code: string) => json<Session>(`/api/sessions/${code}/resume`, 'POST'),
+
+  // FR-5 — Real participant list (replaces the deterministic mock).
+  listSessionParticipants: (code: string) =>
+    json<{ participants: SessionParticipant[] }>(`/api/sessions/${code}/participants`, 'GET'),
+
+  // FR-6 — Direct CSV download URL (lets the browser handle the download).
+  exportSessionCsvUrl: (code: string) => `/api/sessions/${code}/export?format=csv`,
+
+  // Acknowledgement of the latest live-stats broadcast shape.
+  acknowledgeStats: (stats: SessionStatsEventV2) => stats,
 };

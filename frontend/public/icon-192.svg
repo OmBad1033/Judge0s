@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" fill="#0a0a0a"/>
+  <rect x="8" y="8" width="176" height="176" fill="none" stroke="#10b981" stroke-width="4"/>
+  <text x="96" y="74" text-anchor="middle" font-family="monospace" font-size="20" font-weight="700" fill="#10b981" letter-spacing="2">JUDGE</text>
+  <text x="96" y="108" text-anchor="middle" font-family="monospace" font-size="32" font-weight="700" fill="#ffffff" letter-spacing="3">OS</text>
+  <line x1="24" y1="128" x2="168" y2="128" stroke="#10b981" stroke-width="2"/>
+  <text x="96" y="148" text-anchor="middle" font-family="monospace" font-size="10" fill="#10b981" letter-spacing="3">V2.0.4</text>
+  <text x="96" y="166" text-anchor="middle" font-family="monospace" font-size="8" fill="#737373" letter-spacing="2">LIVE FEEDBACK</text>
+</svg>
