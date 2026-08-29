@@ -28,3 +28,8 @@
 - Frontend routes: React Router (`/`, `/admin/login`, `/admin/presentations`, `/admin/presentations/:id/configure`, `/admin/sessions/:code`, `/admin/sessions/:code/results`, `/join`, `/session/:code`).
 - Participation flow is **two distinct pages**: `/join` (entry form) and `/session/:code` (in-session question view).
 - Confidence: 0.9
+
+## Documentation convention
+- Maintains separate **architecture / plan markdown files at the repo root**: `architecture.md` (LLD: schema, API surface, DO design, auth, pipeline), `backend_plan.md` (phased backend build plan + parallelization), `frontend_plan.md` (mobile-first frontend plan, persona-based device priority, page inventory, phasing F0–F9). Distinct from `plan.md` (high-level phased rollout) and `README.md` (intro).
+- These root-level docs describe the **target** design — they may be forward-looking relative to the current code, and the schema/impl should be treated as source of truth until a doc'd phase lands. The doc files are not auto-synced with code.
+- Confidence: 0.7
