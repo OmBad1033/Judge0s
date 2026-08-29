@@ -7,3 +7,9 @@ dist
 .DS_Store
 
 .stitch-html/
+
+# Agent / IDE scaffolding
+.agents/
+.claude/
+.commandcode/
+skills-lock.json
