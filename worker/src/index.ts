@@ -42,7 +42,12 @@ app.use('*', async (c, next) => {
 
 app.get('/api/health', async (c) => {
   const row = await c.env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
-  return c.json({ status: 'ok', db: row?.ok === 1 });
+  return c.json({
+    status: 'ok',
+    db: row?.ok === 1,
+    service: 'live-feedback-worker',
+    version: '0.1.0',
+  });
 });
 
 app.route('/api/admin', auth);

@@ -32,7 +32,12 @@ The backend agent has landed the **big rebuild** per `architecture.md` and `back
 | `DELETE /api/auth/events/:id/admins/:userId` | — | Remove a co-admin. |
 | `GET /api/events/:id/export` | `GET /api/sessions/:code/export` | Per-event rollup (JSON). |
 | `GET /api/events/:id/export.csv` | — | Per-event rollup (CSV). |
-| `GET /api/sessions/:code/state` | `GET /api/sessions/:code/participant-state` | Mobile-reconnect fallback. Same shape; cheaper. |
+| `GET /api/sessions/:code/state` | `GET /api/sessions/:code/participant-state` | Mobile-reconnect fallback. Returns participantId, serverTime, previousSlides. |
+| `GET /api/sessions/:code/join-info` | — | FR-1: Lightweight public lookup for deep links/QR. |
+| `POST /api/sessions/:code/pause` | — | FR-4: Sets session status to 'paused' and broadcasts update. |
+| `POST /api/sessions/:code/resume` | — | FR-4: Sets session status to 'live', resyncs slide to participants. |
+| `GET /api/sessions/:code/participants` | — | FR-5: Real participant list and presence for admin control room. |
+| `GET /api/sessions/:code/export?format=csv` | `GET /api/sessions/:code/export.csv` | FR-6: Direct CSV export endpoint. |
 
 ## Wire-shape notes (additive fields, no breakage)
 

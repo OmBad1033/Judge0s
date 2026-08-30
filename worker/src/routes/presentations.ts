@@ -53,6 +53,12 @@ app.get('/:id', adminGuard, async (c) => {
   return c.json(presentation);
 });
 
+app.delete('/:id', adminGuard, async (c) => {
+  const ok = await presentationService.deletePresentation(c.env, c.req.param('id'));
+  if (!ok) return c.json({ error: 'NOT_FOUND' }, 404);
+  return c.json({ ok: true });
+});
+
 app.get('/:id/default-questions', adminGuard, async (c) => {
   const list = await defaultQuestionService.listDefaultQuestions(c.env, c.req.param('id')!);
   return c.json({ defaultQuestions: list });

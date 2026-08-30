@@ -51,12 +51,6 @@ export default function UploadPresentation() {
     onError: (e) => setUploadErr(e instanceof ApiError ? e.message : 'Upload failed'),
   });
 
-  const startMut = useMutation({
-    mutationFn: (id: string) => api.createSession(id),
-    onSuccess: (s) => navigate(`/admin/sessions/${s.sessionCode}`),
-    onError: (e) => toast.push('error', e instanceof ApiError ? e.message : 'Failed to create session'),
-  });
-
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!file) {
@@ -94,7 +88,7 @@ export default function UploadPresentation() {
       ) : (listQ.data ?? []).length === 0 ? (
         <EmptyState onCreate={() => setOpen(true)} />
       ) : (
-        <PresentationGrid items={listQ.data!} onStart={(id) => startMut.mutate(id)} />
+        <PresentationGrid items={listQ.data!} />
       )}
 
       {open && (
@@ -140,46 +134,34 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   );
 }
 
-function PresentationGrid({
-  items,
-  onStart,
-}: {
-  items: PresentationSummary[];
-  onStart: (id: string) => void;
-}) {
+function PresentationGrid({ items }: { items: PresentationSummary[] }) {
   const navigate = useNavigate();
   return (
     <div className="grid gap-px sm:grid-cols-2 lg:grid-cols-3 bg-border border border-border">
       {items.map((p) => (
-        <div key={p.id} className="bg-surface p-5 flex flex-col">
+        <button
+          key={p.id}
+          onClick={() => navigate(`/admin/presentations/${p.id}/sessions`)}
+          className="bg-surface p-5 flex flex-col text-left hover:bg-surface-1 transition min-h-[160px] group"
+        >
           <div className="flex items-start justify-between gap-2 mb-3">
             <span className="font-mono text-micro uppercase tracking-[0.18em] text-primary">[File]</span>
             <StatusPill status={p.latestSession?.status} />
           </div>
-          <h3 className="font-mono text-h1 text-on-surface mb-1 truncate">{p.title}</h3>
+          <h3 className="font-mono text-h1 text-on-surface mb-1 truncate group-hover:text-primary transition">
+            {p.title}
+          </h3>
           <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mb-4">
             {p.slideCount} Slides &nbsp;·&nbsp; {p.configuredSlides} Configured
           </p>
           <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mb-4 truncate">
             Src: {p.originalFilename}
           </p>
-          <div className="mt-auto flex gap-px">
-            <button
-              onClick={() => navigate(`/admin/presentations/${p.id}/configure`)}
-              className="flex-1 bg-surface border border-border hover:border-primary hover:text-primary font-mono text-label uppercase tracking-[0.15em] px-3 py-2 transition inline-flex items-center justify-center gap-1 min-h-[44px]"
-            >
-              <span className="material-symbols-outlined text-[16px]">edit</span>
-              Configure
-            </button>
-            <button
-              onClick={() => onStart(p.id)}
-              className="flex-1 bg-surface border border-border hover:bg-primary hover:text-on-primary hover:border-primary font-mono text-label uppercase tracking-[0.15em] px-3 py-2 transition inline-flex items-center justify-center gap-1 min-h-[44px]"
-            >
-              <span className="material-symbols-outlined text-[16px]">play_arrow</span>
-              Start
-            </button>
+          <div className="mt-auto flex items-center justify-between font-mono text-micro uppercase tracking-[0.18em] text-muted group-hover:text-primary transition">
+            <span>View_Sessions</span>
+            <span className="material-symbols-outlined text-[16px]">chevron_right</span>
           </div>
-        </div>
+        </button>
       ))}
     </div>
   );

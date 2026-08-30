@@ -11,7 +11,7 @@ export interface Session {
   id: string;
   presentationId: string;
   sessionCode: string;
-  status: 'draft' | 'live' | 'ended';
+  status: 'draft' | 'live' | 'paused' | 'ended';
   currentSlideNumber: number | null;
   createdAt: string;
   startedAt: string | null;
@@ -31,22 +31,23 @@ const err = (error: string, status: 400 | 404 | 409 | 500): { ok: false; error: 
   status,
 });
 
-// Map new state (pending | live | paused | ended) → legacy state (draft | live | ended).
+// Map new state (pending | live | paused | ended) → legacy state (draft | live | paused | ended).
 function toLegacyStatus(status: string): Session['status'] {
   switch (status) {
     case 'pending': return 'draft';
     case 'live':    return 'live';
-    case 'paused':  return 'live';
+    case 'paused':  return 'paused';
     case 'ended':   return 'ended';
     default:        return 'draft';
   }
 }
 
-function fromLegacyStatus(legacy: Session['status']): 'pending' | 'live' | 'ended' {
+function fromLegacyStatus(legacy: Session['status']): 'pending' | 'live' | 'paused' | 'ended' {
   switch (legacy) {
-    case 'draft': return 'pending';
-    case 'live':  return 'live';
-    case 'ended': return 'ended';
+    case 'draft':  return 'pending';
+    case 'live':   return 'live';
+    case 'paused': return 'paused';
+    case 'ended':  return 'ended';
   }
 }
 
@@ -179,8 +180,146 @@ async function notifyAdmins(env: Env, code: string, message: unknown): Promise<v
   await callDO(env, code, 'broadcastToAdmins', { message });
 }
 
-async function broadcastStatsToAdmins(env: Env, code: string, stats: { participantCount: number; currentSlideResponseCount: number }): Promise<void> {
+export interface LiveStatsPayload {
+  participantCount: number;
+  currentSlideResponseCount: number;
+  totalResponseCount: number;
+  currentSlide?: {
+    slideNumber: number;
+    fieldBreakdown: Array<
+      | { fieldId: string; feedbackType: 'boolean' | 'multiple_choice' | 'open_text'; counts: Record<string, number> }
+      | { fieldId: string; questionType: 'interested' | 'rating'; average: number; count: number }
+    >;
+  };
+}
+
+async function broadcastStatsToAdmins(env: Env, code: string, stats: LiveStatsPayload): Promise<void> {
   await callDO(env, code, 'broadcastStats', { stats });
+}
+
+export async function broadcastStats(env: Env, code: string): Promise<void> {
+  const loaded = await loadSessionWithResolvedSlide(env, code);
+  if (!loaded) return;
+  const participantCount = await countQuery(
+    env,
+    'SELECT COUNT(*) AS c FROM participants WHERE session_id = ?',
+    loaded.joined.id,
+  );
+  const totalFeedback = await countQuery(
+    env,
+    'SELECT COUNT(*) AS c FROM feedback_responses WHERE session_id = ?',
+    loaded.joined.id,
+  );
+  const totalDefault = await countQuery(
+    env,
+    'SELECT COUNT(*) AS c FROM default_responses WHERE session_id = ?',
+    loaded.joined.id,
+  );
+  const totalResponseCount = totalFeedback + totalDefault;
+
+  let currentSlideResponseCount = 0;
+  let currentSlideStats: LiveStatsPayload['currentSlide'] = undefined;
+
+  if (loaded.session.currentSlideNumber != null) {
+    const slideNumber = loaded.session.currentSlideNumber;
+    currentSlideResponseCount = await countQuery(
+      env,
+      `SELECT COUNT(*) AS c FROM feedback_responses fr
+       JOIN slides s ON s.id = fr.slide_id
+       WHERE fr.session_id = ? AND s.slide_number = ?`,
+      loaded.joined.id,
+      slideNumber,
+    );
+
+    const fieldBreakdown: Array<
+      | { fieldId: string; feedbackType: 'boolean' | 'multiple_choice' | 'open_text'; counts: Record<string, number> }
+      | { fieldId: string; questionType: 'interested' | 'rating'; average: number; count: number }
+    > = [];
+
+    const slide = await slideService.getSlideByNumber(env, loaded.joined.presentation_id, slideNumber);
+    if (slide?.feedbackRule?.enabled && slide.feedbackRule.feedbackType !== 'disabled') {
+      const { results: fbRows } = await env.DB.prepare(
+        `SELECT fr.response_value FROM feedback_responses fr
+         JOIN slides s ON s.id = fr.slide_id
+         WHERE fr.session_id = ? AND s.slide_number = ?`,
+      )
+        .bind(loaded.joined.id, slideNumber)
+        .all<{ response_value: string | null }>();
+
+      const counts: Record<string, number> = {};
+      if (slide.feedbackRule.feedbackType === 'multiple_choice' && Array.isArray(slide.feedbackRule.options)) {
+        for (const opt of slide.feedbackRule.options) counts[opt] = 0;
+      } else if (slide.feedbackRule.feedbackType === 'boolean') {
+        counts['Yes'] = 0;
+        counts['No'] = 0;
+      }
+      for (const r of fbRows) {
+        if (r.response_value) {
+          counts[r.response_value] = (counts[r.response_value] ?? 0) + 1;
+        }
+      }
+      fieldBreakdown.push({
+        fieldId: `slide-${slideNumber}-rule`,
+        feedbackType: slide.feedbackRule.feedbackType as 'boolean' | 'multiple_choice' | 'open_text',
+        counts,
+      });
+    }
+
+    const dqs = await defaultQuestionService.getDefaultQuestionsForSlide(env, loaded.joined.presentation_id, slideNumber);
+    for (const dq of dqs) {
+      const { results: dqRows } = await env.DB.prepare(
+        `SELECT response_value FROM default_responses WHERE session_id = ? AND default_question_id = ? AND slide_number = ?`,
+      )
+        .bind(loaded.joined.id, dq.id, slideNumber)
+        .all<{ response_value: string }>();
+
+      if (dq.questionType === 'rating') {
+        let sum = 0;
+        let validCount = 0;
+        for (const r of dqRows) {
+          const val = Number(r.response_value);
+          if (!isNaN(val)) {
+            sum += val;
+            validCount++;
+          }
+        }
+        const average = validCount > 0 ? sum / validCount : 0;
+        fieldBreakdown.push({
+          fieldId: dq.id,
+          questionType: 'rating',
+          average,
+          count: dqRows.length,
+        });
+      } else {
+        let interestedCount = 0;
+        for (const r of dqRows) {
+          const val = r.response_value?.toLowerCase();
+          if (val === 'interested' || val === 'yes') {
+            interestedCount++;
+          }
+        }
+        const average = dqRows.length > 0 ? (interestedCount / dqRows.length) * 100 : 0;
+        fieldBreakdown.push({
+          fieldId: dq.id,
+          questionType: 'interested',
+          average,
+          count: dqRows.length,
+        });
+      }
+    }
+
+    currentSlideStats = {
+      slideNumber,
+      fieldBreakdown,
+    };
+  }
+
+  await broadcastStatsToAdmins(env, code, {
+    participantCount,
+    currentSlideResponseCount,
+    totalResponseCount,
+    currentSlide: currentSlideStats,
+  });
 }
 
 // Mirror the new `sessions` row into `presentation_sessions` so the legacy
@@ -351,6 +490,74 @@ export async function changeSlide(
   return { ok: true, session: after!.session };
 }
 
+export async function pauseSession(env: Env, code: string): Promise<Result<SessionWithPresentation>> {
+  const loaded = await loadSessionWithResolvedSlide(env, code);
+  if (!loaded) return err('NOT_FOUND', 404);
+  if (loaded.joined.status === 'ended') return err('SESSION_ENDED', 409);
+  if (loaded.joined.status === 'pending') return err('SESSION_NOT_LIVE', 409);
+  if (loaded.joined.status === 'paused') return { ok: true, session: loaded.session };
+
+  await env.DB.prepare(
+    `UPDATE sessions SET status = 'paused' WHERE id = ?`,
+  )
+    .bind(loaded.joined.id)
+    .run();
+
+  await mirrorIntoLegacy(
+    env,
+    loaded.joined.id,
+    loaded.joined.event_id,
+    loaded.joined.session_code,
+    'paused',
+    loaded.session.currentSlideNumber,
+    loaded.joined.started_at,
+    loaded.joined.ended_at,
+    loaded.joined.created_at,
+  );
+
+  await callDO(env, code, 'broadcastAll', { message: { type: 'SESSION_PAUSED', status: 'paused' } });
+  await broadcastStats(env, code);
+  const after = await loadSessionWithResolvedSlide(env, code);
+  return { ok: true, session: after!.session };
+}
+
+export async function resumeSession(env: Env, code: string): Promise<Result<SessionWithPresentation>> {
+  const loaded = await loadSessionWithResolvedSlide(env, code);
+  if (!loaded) return err('NOT_FOUND', 404);
+  if (loaded.joined.status === 'ended') return err('SESSION_ENDED', 409);
+  if (loaded.joined.status === 'pending') return err('SESSION_NOT_LIVE', 409);
+
+  await env.DB.prepare(
+    `UPDATE sessions SET status = 'live' WHERE id = ?`,
+  )
+    .bind(loaded.joined.id)
+    .run();
+
+  await mirrorIntoLegacy(
+    env,
+    loaded.joined.id,
+    loaded.joined.event_id,
+    loaded.joined.session_code,
+    'live',
+    loaded.session.currentSlideNumber,
+    loaded.joined.started_at,
+    loaded.joined.ended_at,
+    loaded.joined.created_at,
+  );
+
+  const currentSlideNumber = loaded.session.currentSlideNumber ?? 1;
+  const slide = await slideService.getSlideByNumber(env, loaded.joined.presentation_id, currentSlideNumber);
+  const payload = await composeSlidePayload(env, loaded.joined.presentation_id, slide, currentSlideNumber);
+
+  await notifyParticipants(env, code, payload);
+  await callDO(env, code, 'broadcastAll', {
+    message: { type: 'SESSION_RESUMED', status: 'live', currentSlideNumber },
+  });
+  await broadcastStats(env, code);
+  const after = await loadSessionWithResolvedSlide(env, code);
+  return { ok: true, session: after!.session };
+}
+
 export async function endSession(env: Env, code: string): Promise<Result<SessionWithPresentation>> {
   const loaded = await loadSessionWithResolvedSlide(env, code);
   if (!loaded) return err('NOT_FOUND', 404);
@@ -476,26 +683,4 @@ export async function getControlState(env: Env, code: string): Promise<ControlSt
   }
 
   return { session: loaded.session, slides, participantCount, responseCount, currentSlideResponseCount };
-}
-
-export async function broadcastStats(env: Env, code: string): Promise<void> {
-  const loaded = await loadSessionWithResolvedSlide(env, code);
-  if (!loaded) return;
-  const participantCount = await countQuery(
-    env,
-    'SELECT COUNT(*) AS c FROM participants WHERE session_id = ?',
-    loaded.joined.id,
-  );
-  let currentSlideResponseCount = 0;
-  if (loaded.session.currentSlideNumber != null) {
-    currentSlideResponseCount = await countQuery(
-      env,
-      `SELECT COUNT(*) AS c FROM feedback_responses fr
-       JOIN slides s ON s.id = fr.slide_id
-       WHERE fr.session_id = ? AND s.slide_number = ?`,
-      loaded.joined.id,
-      loaded.session.currentSlideNumber,
-    );
-  }
-  await broadcastStatsToAdmins(env, code, { participantCount, currentSlideResponseCount });
 }
