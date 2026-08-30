@@ -3,8 +3,10 @@ import { newId, now } from '../utils/common';
 import { generateSessionCode } from '../utils/sessionCode';
 import * as slideService from './slideService';
 import * as defaultQuestionService from './defaultQuestionService';
+import { eventIdFromPresentation } from './eventService';
 import type { Slide } from './slideService';
 
+// Legacy wire shape — preserved exactly so the existing frontend doesn't break.
 export interface Session {
   id: string;
   presentationId: string;
@@ -29,18 +31,66 @@ const err = (error: string, status: 400 | 404 | 409 | 500): { ok: false; error: 
   status,
 });
 
-function mapSession(r: Record<string, unknown>): SessionWithPresentation {
+// Map new state (pending | live | paused | ended) → legacy state (draft | live | ended).
+function toLegacyStatus(status: string): Session['status'] {
+  switch (status) {
+    case 'pending': return 'draft';
+    case 'live':    return 'live';
+    case 'paused':  return 'live';
+    case 'ended':   return 'ended';
+    default:        return 'draft';
+  }
+}
+
+function fromLegacyStatus(legacy: Session['status']): 'pending' | 'live' | 'ended' {
+  switch (legacy) {
+    case 'draft': return 'pending';
+    case 'live':  return 'live';
+    case 'ended': return 'ended';
+  }
+}
+
+interface JoinedSession {
+  id: string;
+  event_id: string;
+  session_code: string;
+  status: string;
+  current_slide_id: string | null;
+  created_by: string;
+  started_at: string | null;
+  ended_at: string | null;
+  created_at: string;
+  presentation_title: string;
+  slide_count: number;
+  presentation_id: string;
+}
+
+async function getJoinedSession(env: Env, code: string): Promise<JoinedSession | null> {
+  const row = await env.DB.prepare(
+    `SELECT s.*, e.name AS presentation_title,
+            COALESCE((SELECT pf.slide_count FROM presentation_files pf WHERE pf.event_id = s.event_id ORDER BY pf.uploaded_at DESC LIMIT 1), 0) AS slide_count,
+            s.event_id AS presentation_id
+     FROM sessions s
+     JOIN events e ON e.id = s.event_id
+     WHERE s.session_code = ?`,
+  )
+    .bind(code)
+    .first();
+  return row as JoinedSession | null;
+}
+
+function mapSession(row: JoinedSession): SessionWithPresentation {
   return {
-    id: r.id as string,
-    presentationId: r.presentation_id as string,
-    sessionCode: r.session_code as string,
-    status: r.status as Session['status'],
-    currentSlideNumber: (r.current_slide_number as number) ?? null,
-    createdAt: r.created_at as string,
-    startedAt: (r.started_at as string) ?? null,
-    endedAt: (r.ended_at as string) ?? null,
-    presentationTitle: r.presentation_title as string,
-    slideCount: r.slide_count as number,
+    id: row.id,
+    presentationId: row.presentation_id,
+    sessionCode: row.session_code,
+    status: toLegacyStatus(row.status),
+    currentSlideNumber: null, // resolved per-call via the slideService
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    presentationTitle: row.presentation_title,
+    slideCount: row.slide_count,
   };
 }
 
@@ -74,8 +124,6 @@ function buildSlideChangedPayload(slide: Slide) {
   };
 }
 
-// Payload for slides the admin never configured: track the slide number but
-// show no content and no feedback form (i.e. ignore it).
 function blankSlidePayload(slideNumber: number) {
   return {
     type: 'SLIDE_CHANGED' as const,
@@ -92,9 +140,6 @@ function blankSlidePayload(slideNumber: number) {
   };
 }
 
-// Attach the default questions that target this slide so participants can
-// answer generic questions (e.g. interested / 0-10 rating) in addition to the
-// slide's own rule. Works for configured and blank slides alike.
 async function composeSlidePayload(
   env: Env,
   presentationId: string,
@@ -113,53 +158,114 @@ async function composeSlidePayload(
   };
 }
 
-async function notifyDO(env: Env, code: string, message: unknown): Promise<void> {
+// Worker → DO RPC. Hides the fetch round-trip so callers can use typed helpers.
+async function callDO(env: Env, code: string, command: string, body: Record<string, unknown> = {}): Promise<Response> {
   const id = env.PRESENTATION_SESSION.idFromName(code);
   const stub = env.PRESENTATION_SESSION.get(id);
-  await stub.fetch(
-    new Request('https://presentation-session/broadcast', {
+  return stub.fetch(
+    new Request(`https://session-room/${command}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(message),
+      body: JSON.stringify({ command, ...body }),
     }),
   );
 }
 
-export async function getSession(env: Env, code: string): Promise<SessionWithPresentation | null> {
-  const row = await env.DB.prepare(
-    `SELECT s.*, p.title AS presentation_title, p.slide_count AS slide_count
-     FROM presentation_sessions s
-     JOIN presentations p ON p.id = s.presentation_id
-     WHERE s.session_code = ?`,
+async function notifyParticipants(env: Env, code: string, message: unknown): Promise<void> {
+  await callDO(env, code, 'broadcastToParticipants', { message });
+}
+
+async function notifyAdmins(env: Env, code: string, message: unknown): Promise<void> {
+  await callDO(env, code, 'broadcastToAdmins', { message });
+}
+
+async function broadcastStatsToAdmins(env: Env, code: string, stats: { participantCount: number; currentSlideResponseCount: number }): Promise<void> {
+  await callDO(env, code, 'broadcastStats', { stats });
+}
+
+// Mirror the new `sessions` row into `presentation_sessions` so the legacy
+// FK constraints from `participants`, `feedback_responses`, `default_responses`
+// continue to resolve. The `id` is preserved across the two tables.
+async function mirrorIntoLegacy(
+  env: Env,
+  id: string,
+  eventId: string,
+  sessionCode: string,
+  status: string,
+  currentSlideNumber: number | null,
+  startedAt: string | null,
+  endedAt: string | null,
+  createdAt: string,
+): Promise<void> {
+  // Ensure a `presentations` row exists with the same id as the event so the
+  // FK from `presentation_sessions.presentation_id` resolves. (The compat
+  // layer uses eventId === presentationId, see eventService.eventIdFromPresentation.)
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO presentations (id, title, original_filename, r2_object_key, slide_count, created_at)
+     VALUES (?, ?, '', '', 0, ?)`,
   )
-    .bind(code)
-    .first();
-  return row ? mapSession(row) : null;
+    .bind(eventId, `Event ${eventId}`, createdAt)
+    .run();
+
+  await env.DB.prepare(
+    `INSERT INTO presentation_sessions (id, presentation_id, session_code, status, current_slide_number, created_at, started_at, ended_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       presentation_id = excluded.presentation_id,
+       session_code    = excluded.session_code,
+       status          = excluded.status,
+       current_slide_number = excluded.current_slide_number,
+       started_at      = excluded.started_at,
+       ended_at        = excluded.ended_at`,
+  )
+    .bind(id, eventId, sessionCode, toLegacyStatus(status), currentSlideNumber, createdAt, startedAt, endedAt)
+    .run();
+}
+
+async function loadSessionWithResolvedSlide(env: Env, code: string): Promise<{ joined: JoinedSession; session: SessionWithPresentation } | null> {
+  const joined = await getJoinedSession(env, code);
+  if (!joined) return null;
+  const session = mapSession(joined);
+  if (joined.current_slide_id) {
+    const slide = await env.DB.prepare('SELECT slide_number FROM slides WHERE id = ?')
+      .bind(joined.current_slide_id)
+      .first<{ slide_number: number }>();
+    session.currentSlideNumber = slide?.slide_number ?? null;
+  }
+  return { joined, session };
+}
+
+export async function getSession(env: Env, code: string): Promise<SessionWithPresentation | null> {
+  const loaded = await loadSessionWithResolvedSlide(env, code);
+  return loaded?.session ?? null;
 }
 
 export async function createSession(
   env: Env,
   presentationId: string,
+  options: { createdBy?: string } = {},
 ): Promise<Result<SessionWithPresentation>> {
-  const presentation = await env.DB.prepare('SELECT id FROM presentations WHERE id = ?')
-    .bind(presentationId)
-    .first();
-  if (!presentation) return err('PRESENTATION_NOT_FOUND', 404);
+  const eventId = await eventIdFromPresentation(env, presentationId);
+  if (!eventId) return err('PRESENTATION_NOT_FOUND', 404);
 
+  const createdBy = options.createdBy ?? 'local-admin';
   const createdAt = now();
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateSessionCode();
+    const id = newId();
     try {
       await env.DB.prepare(
-        `INSERT INTO presentation_sessions (id, presentation_id, session_code, status, current_slide_number, created_at)
-         VALUES (?, ?, ?, 'draft', NULL, ?)`,
+        `INSERT INTO sessions (id, event_id, session_code, status, created_by, created_at)
+         VALUES (?, ?, ?, 'pending', ?, ?)`,
       )
-        .bind(newId(), presentationId, code, createdAt)
+        .bind(id, eventId, code, createdBy, createdAt)
         .run();
-      const session = await getSession(env, code);
-      return { ok: true, session: session! };
+      await mirrorIntoLegacy(env, id, eventId, code, 'pending', null, null, null, createdAt);
+      const loaded = await loadSessionWithResolvedSlide(env, code);
+      if (!loaded) return err('NOT_FOUND', 500);
+      return { ok: true, session: loaded.session };
     } catch (e) {
-      if ((e as Error).message?.includes('UNIQUE')) continue; // code collision, retry
+      if ((e as Error).message?.includes('UNIQUE')) continue;
       throw e;
     }
   }
@@ -167,23 +273,46 @@ export async function createSession(
 }
 
 export async function startSession(env: Env, code: string): Promise<Result<SessionWithPresentation>> {
-  const session = await getSession(env, code);
-  if (!session) return err('NOT_FOUND', 404);
-  if (session.status === 'ended') return err('SESSION_ENDED', 409);
+  const loaded = await loadSessionWithResolvedSlide(env, code);
+  if (!loaded) return err('NOT_FOUND', 404);
+  if (loaded.joined.status === 'ended') return err('SESSION_ENDED', 409);
 
-  const slide = await slideService.getSlideByNumber(env, session.presentationId, 1);
-  const payload = await composeSlidePayload(env, session.presentationId, slide, 1);
+  const slide = await slideService.getSlideByNumber(env, loaded.joined.presentation_id, 1);
+  const payload = await composeSlidePayload(env, loaded.joined.presentation_id, slide, 1);
+  const startedAt = loaded.joined.started_at ?? now();
 
   await env.DB.prepare(
-    `UPDATE presentation_sessions
-     SET status = 'live', current_slide_number = 1, started_at = COALESCE(started_at, ?)
-     WHERE session_code = ?`,
+    `UPDATE sessions SET status = 'live', current_slide_id = (SELECT id FROM slides WHERE presentation_id = ? AND slide_number = 1), started_at = ? WHERE id = ?`,
   )
-    .bind(now(), code)
+    .bind(loaded.joined.presentation_id, startedAt, loaded.joined.id)
     .run();
 
-  await notifyDO(env, code, payload);
-  return { ok: true, session: (await getSession(env, code))! };
+  // Phase 4 — prime the DO with the current slide so participants that join
+  // immediately receive SLIDE_CHANGED without an extra round-trip.
+  const slideRow = await env.DB.prepare(
+    'SELECT id FROM slides WHERE presentation_id = ? AND slide_number = 1',
+  )
+    .bind(loaded.joined.presentation_id)
+    .first<{ id: string }>();
+  if (slideRow) {
+    await callDO(env, code, 'setCurrentSlide', { slideId: slideRow.id, slideNumber: 1 });
+  }
+
+  await mirrorIntoLegacy(
+    env,
+    loaded.joined.id,
+    loaded.joined.event_id,
+    loaded.joined.session_code,
+    'live',
+    1,
+    startedAt,
+    loaded.joined.ended_at,
+    loaded.joined.created_at,
+  );
+
+  await notifyParticipants(env, code, payload);
+  const after = await loadSessionWithResolvedSlide(env, code);
+  return { ok: true, session: after!.session };
 }
 
 export async function changeSlide(
@@ -191,62 +320,98 @@ export async function changeSlide(
   code: string,
   slideNumber: number,
 ): Promise<Result<SessionWithPresentation>> {
-  const session = await getSession(env, code);
-  if (!session) return err('NOT_FOUND', 404);
-  if (session.status !== 'live') return err('SESSION_NOT_LIVE', 409);
-  if (slideNumber < 1 || slideNumber > session.slideCount) return err('SLIDE_OUT_OF_RANGE', 400);
+  const loaded = await loadSessionWithResolvedSlide(env, code);
+  if (!loaded) return err('NOT_FOUND', 404);
+  if (loaded.joined.status !== 'live' && loaded.joined.status !== 'paused') return err('SESSION_NOT_LIVE', 409);
+  if (slideNumber < 1 || slideNumber > loaded.session.slideCount) return err('SLIDE_OUT_OF_RANGE', 400);
 
-  const slide = await slideService.getSlideByNumber(env, session.presentationId, slideNumber);
-  const payload = await composeSlidePayload(env, session.presentationId, slide, slideNumber);
+  const slide = await slideService.getSlideByNumber(env, loaded.joined.presentation_id, slideNumber);
+  const payload = await composeSlidePayload(env, loaded.joined.presentation_id, slide, slideNumber);
 
-  await env.DB.prepare('UPDATE presentation_sessions SET current_slide_number = ? WHERE session_code = ?')
-    .bind(slideNumber, code)
+  await env.DB.prepare(
+    `UPDATE sessions SET current_slide_id = (SELECT id FROM slides WHERE presentation_id = ? AND slide_number = ?) WHERE id = ?`,
+  )
+    .bind(loaded.joined.presentation_id, slideNumber, loaded.joined.id)
     .run();
 
-  await notifyDO(env, code, payload);
-  return { ok: true, session: (await getSession(env, code))! };
+  await mirrorIntoLegacy(
+    env,
+    loaded.joined.id,
+    loaded.joined.event_id,
+    loaded.joined.session_code,
+    loaded.joined.status,
+    slideNumber,
+    loaded.joined.started_at,
+    loaded.joined.ended_at,
+    loaded.joined.created_at,
+  );
+
+  await notifyParticipants(env, code, payload);
+  const after = await loadSessionWithResolvedSlide(env, code);
+  return { ok: true, session: after!.session };
 }
 
 export async function endSession(env: Env, code: string): Promise<Result<SessionWithPresentation>> {
-  const session = await getSession(env, code);
-  if (!session) return err('NOT_FOUND', 404);
-  if (session.status !== 'live') return err('SESSION_NOT_LIVE', 409);
+  const loaded = await loadSessionWithResolvedSlide(env, code);
+  if (!loaded) return err('NOT_FOUND', 404);
+  if (loaded.joined.status === 'ended') return { ok: true, session: loaded.session };
 
-  await env.DB.prepare("UPDATE presentation_sessions SET status = 'ended', ended_at = ? WHERE session_code = ?")
-    .bind(now(), code)
+  const endedAt = now();
+  await env.DB.prepare(
+    `UPDATE sessions SET status = 'ended', ended_at = ? WHERE id = ?`,
+  )
+    .bind(endedAt, loaded.joined.id)
     .run();
 
-  await notifyDO(env, code, { type: 'SESSION_ENDED' });
-  return { ok: true, session: (await getSession(env, code))! };
+  await mirrorIntoLegacy(
+    env,
+    loaded.joined.id,
+    loaded.joined.event_id,
+    loaded.joined.session_code,
+    'ended',
+    loaded.session.currentSlideNumber,
+    loaded.joined.started_at,
+    endedAt,
+    loaded.joined.created_at,
+  );
+
+  await notifyParticipants(env, code, { type: 'SESSION_ENDED' });
+  const after = await loadSessionWithResolvedSlide(env, code);
+  return { ok: true, session: after!.session };
 }
 
-// Snapshot of the current slide as a SLIDE_CHANGED-shaped event, for initial
-// client state (on join / WS connect / reconnect).
 export async function currentSlideEvent(env: Env, code: string): Promise<Record<string, unknown> | null> {
-  const session = await getSession(env, code);
-  if (!session) return null;
-  if (session.currentSlideNumber == null) {
-    return { type: 'NO_ACTIVE_SLIDE', status: session.status };
+  const loaded = await loadSessionWithResolvedSlide(env, code);
+  if (!loaded) return null;
+  if (loaded.session.currentSlideNumber == null) {
+    return { type: 'NO_ACTIVE_SLIDE', status: loaded.session.status };
   }
-  const slide = await slideService.getSlideByNumber(env, session.presentationId, session.currentSlideNumber);
-  return (await composeSlidePayload(env, session.presentationId, slide, session.currentSlideNumber)) as Record<
+  const slide = await slideService.getSlideByNumber(
+    env,
+    loaded.joined.presentation_id,
+    loaded.session.currentSlideNumber,
+  );
+  return (await composeSlidePayload(env, loaded.joined.presentation_id, slide, loaded.session.currentSlideNumber)) as Record<
     string,
     unknown
   >;
 }
 
-// P1 §3.2 — session discovery for a presentation (newest first).
 export async function listSessions(env: Env, presentationId: string): Promise<SessionWithPresentation[]> {
+  const eventId = await eventIdFromPresentation(env, presentationId);
+  if (!eventId) return [];
   const { results } = await env.DB.prepare(
-    `SELECT s.*, p.title AS presentation_title, p.slide_count AS slide_count
-     FROM presentation_sessions s
-     JOIN presentations p ON p.id = s.presentation_id
-     WHERE s.presentation_id = ?
+    `SELECT s.*, e.name AS presentation_title,
+            COALESCE((SELECT pf.slide_count FROM presentation_files pf WHERE pf.event_id = s.event_id ORDER BY pf.uploaded_at DESC LIMIT 1), 0) AS slide_count,
+            s.event_id AS presentation_id
+     FROM sessions s
+     JOIN events e ON e.id = s.event_id
+     WHERE s.event_id = ?
      ORDER BY s.created_at DESC`,
   )
-    .bind(presentationId)
+    .bind(eventId)
     .all();
-  return (results as Record<string, unknown>[]).map(mapSession);
+  return (results as unknown as JoinedSession[]).map(mapSession);
 }
 
 async function countQuery(env: Env, sql: string, ...binds: (string | number)[]): Promise<number> {
@@ -256,7 +421,6 @@ async function countQuery(env: Env, sql: string, ...binds: (string | number)[]):
   return row?.c ?? 0;
 }
 
-// P2 §4.1 — control-room state: session, all slide summaries, participant/response counts.
 export interface ControlState {
   session: SessionWithPresentation;
   slides: {
@@ -272,12 +436,12 @@ export interface ControlState {
 }
 
 export async function getControlState(env: Env, code: string): Promise<ControlState | null> {
-  const session = await getSession(env, code);
-  if (!session) return null;
+  const loaded = await loadSessionWithResolvedSlide(env, code);
+  if (!loaded) return null;
 
-  const configured = await slideService.listSlides(env, session.presentationId);
+  const configured = await slideService.listSlides(env, loaded.joined.presentation_id);
   const byNum = new Map(configured.map((s) => [s.slideNumber, s]));
-  const slides = Array.from({ length: session.slideCount }, (_, i) => {
+  const slides = Array.from({ length: loaded.session.slideCount }, (_, i) => {
     const n = i + 1;
     const s = byNum.get(n);
     return {
@@ -292,51 +456,46 @@ export async function getControlState(env: Env, code: string): Promise<ControlSt
   const participantCount = await countQuery(
     env,
     'SELECT COUNT(*) AS c FROM participants WHERE session_id = ?',
-    session.id,
+    loaded.joined.id,
   );
   const responseCount = await countQuery(
     env,
     'SELECT COUNT(*) AS c FROM feedback_responses WHERE session_id = ?',
-    session.id,
+    loaded.joined.id,
   );
   let currentSlideResponseCount = 0;
-  if (session.currentSlideNumber != null) {
+  if (loaded.session.currentSlideNumber != null) {
     currentSlideResponseCount = await countQuery(
       env,
       `SELECT COUNT(*) AS c FROM feedback_responses fr
        JOIN slides s ON s.id = fr.slide_id
        WHERE fr.session_id = ? AND s.slide_number = ?`,
-      session.id,
-      session.currentSlideNumber,
+      loaded.joined.id,
+      loaded.session.currentSlideNumber,
     );
   }
 
-  return { session, slides, participantCount, responseCount, currentSlideResponseCount };
+  return { session: loaded.session, slides, participantCount, responseCount, currentSlideResponseCount };
 }
 
-// P2 §4.2 — broadcast aggregate counts (no PII) to the session's live clients.
 export async function broadcastStats(env: Env, code: string): Promise<void> {
-  const session = await getSession(env, code);
-  if (!session) return;
+  const loaded = await loadSessionWithResolvedSlide(env, code);
+  if (!loaded) return;
   const participantCount = await countQuery(
     env,
     'SELECT COUNT(*) AS c FROM participants WHERE session_id = ?',
-    session.id,
+    loaded.joined.id,
   );
   let currentSlideResponseCount = 0;
-  if (session.currentSlideNumber != null) {
+  if (loaded.session.currentSlideNumber != null) {
     currentSlideResponseCount = await countQuery(
       env,
       `SELECT COUNT(*) AS c FROM feedback_responses fr
        JOIN slides s ON s.id = fr.slide_id
        WHERE fr.session_id = ? AND s.slide_number = ?`,
-      session.id,
-      session.currentSlideNumber,
+      loaded.joined.id,
+      loaded.session.currentSlideNumber,
     );
   }
-  await notifyDO(env, code, {
-    type: 'SESSION_STATS_UPDATED',
-    participantCount,
-    currentSlideResponseCount,
-  });
+  await broadcastStatsToAdmins(env, code, { participantCount, currentSlideResponseCount });
 }

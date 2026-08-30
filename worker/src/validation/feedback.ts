@@ -3,6 +3,31 @@ import { z } from 'zod';
 export const FEEDBACK_TYPES = ['disabled', 'boolean', 'multiple_choice', 'open_text'] as const;
 export type FeedbackType = (typeof FEEDBACK_TYPES)[number];
 
+// Phase 3 — new field-type enum used by the form builder.
+export const FIELD_TYPES = [
+  'boolean',
+  'single_select',
+  'multi_select',
+  'rating',
+  'nps',
+  'text',
+  'textarea',
+] as const;
+export type FieldType = (typeof FIELD_TYPES)[number];
+
+export const fieldTypeSchema = z.enum(FIELD_TYPES);
+
+export const feedbackFieldConfigSchema = z.object({
+  fieldType: fieldTypeSchema,
+  label: z.string().min(1),
+  options: z.array(z.string()).optional(),
+  isRequired: z.boolean().optional(),
+  config: z.record(z.unknown()).optional(),
+});
+export type FeedbackFieldConfig = z.infer<typeof feedbackFieldConfigSchema>;
+
+export const feedbackFieldsArraySchema = z.array(feedbackFieldConfigSchema).max(20);
+
 export const MAX_OPEN_TEXT_LENGTH = 2000;
 
 export const feedbackRuleConfigSchema = z.object({

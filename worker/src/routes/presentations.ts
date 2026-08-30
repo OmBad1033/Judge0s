@@ -4,6 +4,7 @@ import type { Env } from '../env';
 import { adminGuard } from '../utils/auth';
 import * as presentationService from '../services/presentationService';
 import * as defaultQuestionService from '../services/defaultQuestionService';
+import * as eventService from '../services/eventService';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -36,11 +37,13 @@ app.post('/', adminGuard, async (c) => {
   if (!/\.pptx$/i.test(file.name)) return c.json({ error: 'INVALID_FILE_TYPE' }, 400);
   if (file.size > MAX_FILE_BYTES) return c.json({ error: 'FILE_TOO_LARGE' }, 400);
 
-  const presentation = await presentationService.createPresentation(c.env, {
-    title,
-    slideCount,
-    file,
-  });
+  // Phase 2 — auto-create an Event for the presentation so the legacy
+  // `presentationId` parameter and the new `eventId` are the same value.
+  const ev = await eventService.createEvent(c.env, { name: title, ownerId: 'local-admin' });
+  const presentation = await presentationService.createPresentation(
+    c.env,
+    { title, slideCount, file, eventId: ev.id },
+  );
   return c.json(presentation, 201);
 });
 

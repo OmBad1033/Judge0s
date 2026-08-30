@@ -1,12 +1,16 @@
 import type { Env } from '../env';
 import { newId, now } from '../utils/common';
 import * as sessionService from './sessionService';
+import { signParticipantToken } from './jwtService';
 
 export interface JoinResponse {
   participantId: string;
   sessionCode: string;
   status: string;
   currentSlide: number | null;
+  // Phase 5 — additive; lets a client resume the WS connection after
+  // backgrounding the phone.
+  joinToken?: string;
 }
 
 type Result =
@@ -32,6 +36,10 @@ export async function joinSession(
     .bind(newId(), session.id, name, email, now())
     .first<{ id: string }>();
 
+  // Phase 5 — mint a long-lived signed token (8h) so the participant can
+  // resume the WebSocket after backgrounding the phone.
+  const joinToken = await signParticipantToken(row!.id, session.id, env.JWT_SECRET);
+
   return {
     ok: true,
     data: {
@@ -39,6 +47,7 @@ export async function joinSession(
       sessionCode: code,
       status: session.status,
       currentSlide: session.currentSlideNumber,
+      joinToken,
     },
   };
 }
