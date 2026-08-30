@@ -16,7 +16,7 @@ implements the matching endpoint/migration; frontend_fix then consumes it once d
 - **frontend_fix** consumes `shipped` items as soon as it sees them — never before, since
   unreleased endpoints would be undefined behavior.
 
-### FR-1 — Deep-link-friendly session lookup (status: requested)
+### FR-1 — Deep-link-friendly session lookup (status: shipped)
 
 **Why:** Mobile-first participant flow needs `/join/:code` to resolve without a separate `GET /sessions/:code` round trip when a participant opens a shared link/QR. The `code` in the URL should be enough to fetch a tiny "is this joinable right now?" payload.
 
@@ -40,7 +40,7 @@ implements the matching endpoint/migration; frontend_fix then consumes it once d
 
 **Out of scope:** OAuth for participants, rate-limiting (Phase 8).
 
-### FR-2 — Resume-friendly session state for participants (status: requested)
+### FR-2 — Resume-friendly session state for participants (status: shipped)
 
 **Why:** Mobile networks drop WebSockets more often than desktop. The frontend wants a single cheap REST call that returns exactly what the participant needs to render the current slide + their own prior responses — already partially implemented as `/api/sessions/:code/participant-state` (P1 §3.3 in the current worker).
 
@@ -64,7 +64,7 @@ implements the matching endpoint/migration; frontend_fix then consumes it once d
 
 **Frontend impact:** `ViewSession.tsx` already calls this on mount. The new fields are optional — frontend will use them when present and gracefully ignore them otherwise.
 
-### FR-3 — Live stats payload upgrade for the admin (status: requested)
+### FR-3 — Live stats payload upgrade for the admin (status: shipped)
 
 **Why:** The Live Control Room needs more than `participantCount` + `currentSlideResponseCount`. To power the per-slide response breakdown (Phase 4 admin analytics), backend should include per-field counts.
 
@@ -89,7 +89,7 @@ implements the matching endpoint/migration; frontend_fix then consumes it once d
 
 **Out of scope:** Historical session analytics — that's `/api/sessions/:code/export` (Phase 6).
 
-### FR-4 — Lightweight `pause` / `resume` endpoint passthrough (status: requested)
+### FR-4 — Lightweight `pause` / `resume` endpoint passthrough (status: shipped)
 
 **Why:** Phase 4 admin persona explicitly mentions a Pause button in the Live Control Room. Frontend already has the button stub but no matching backend endpoint.
 
@@ -103,7 +103,7 @@ implements the matching endpoint/migration; frontend_fix then consumes it once d
 
 **Optional but nice:** a `SESSION_STATUS` broadcast on any status change (start/pause/resume/end), so participants see accurate state without polling.
 
-### FR-5 — Server-side presence count instead of mock data (status: requested)
+### FR-5 — Server-side presence count instead of mock data (status: shipped)
 
 **Why:** The current Control Room renders a "Participant_Node_Activity" table fed by deterministic mock data (`lib/mockParticipants.ts`). The real `participants` table already tracks who's joined; backend should expose a slim list for the admin.
 
@@ -123,7 +123,7 @@ implements the matching endpoint/migration; frontend_fix then consumes it once d
 
 **Privacy note:** `email` is **not** returned here. The export endpoint (`/api/sessions/:code/export`) is where admins see emails. This endpoint is for presence/activity only.
 
-### FR-6 — CSV export endpoint parity with JSON (status: requested)
+### FR-6 — CSV export endpoint parity with JSON (status: shipped)
 
 **Why:** Current frontend builds CSV client-side from the JSON export. Backend should own CSV so it can be reused for the future per-event rollup and so the frontend can stop duplicating that code.
 
@@ -137,7 +137,7 @@ implements the matching endpoint/migration; frontend_fix then consumes it once d
 
 **Frontend impact:** Replace the `toCSV` helper in `SessionResults.tsx` with a direct download link to `?format=csv`. One less client-side dependency.
 
-### FR-7 — Health endpoint stability (status: requested)
+### FR-7 — Health endpoint stability (status: shipped)
 
 **Why:** Phase 8 hardening. `GET /api/health` currently runs `SELECT 1` — fine, but add a `service` name + version so frontend and any uptime probe can detect deployments.
 

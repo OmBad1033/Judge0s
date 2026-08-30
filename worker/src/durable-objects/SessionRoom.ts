@@ -57,6 +57,17 @@ export class SessionRoom extends DurableObject<Env> {
           await this.broadcastParticipants({ type: 'SLIDE_CHANGED', slideNumber: this.inMemorySlideNumber });
           return new Response('ok');
         }
+        case 'broadcastToParticipants': {
+          if (body.message && typeof body.message === 'object' && 'slideNumber' in (body.message as Record<string, unknown>)) {
+            this.inMemorySlideNumber = (body.message as { slideNumber: number }).slideNumber;
+          }
+          await this.broadcastParticipants(body.message);
+          return new Response('ok');
+        }
+        case 'broadcastAll': {
+          await this.broadcastAll(body.message);
+          return new Response('ok');
+        }
         case 'setSession': {
           this.inMemorySessionId = body.sessionId as string;
           this.inMemorySessionCode = body.sessionCode as string;

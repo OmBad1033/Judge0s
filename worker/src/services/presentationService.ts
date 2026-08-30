@@ -207,6 +207,49 @@ export async function replacePresentation(
   };
 }
 
+// Full cascade delete of a presentation ("event" in the new model):
+// responses, participants, sessions, slides, default questions, file records,
+// the presentation row itself, plus every R2 object under its prefix.
+// D1 batch runs in an implicit transaction, so the DB stays consistent even
+// if the R2 cleanup below fails.
+export async function deletePresentation(env: Env, id: string): Promise<boolean> {
+  const existing = await env.DB.prepare('SELECT id FROM presentations WHERE id = ?')
+    .bind(id)
+    .first();
+  if (!existing) return false;
+
+  await env.DB.batch([
+    env.DB.prepare(
+      `DELETE FROM feedback_responses WHERE session_id IN (SELECT id FROM presentation_sessions WHERE presentation_id = ?)`,
+    ).bind(id),
+    env.DB.prepare(
+      `DELETE FROM default_responses WHERE session_id IN (SELECT id FROM presentation_sessions WHERE presentation_id = ?)`,
+    ).bind(id),
+    env.DB.prepare(
+      `DELETE FROM participants WHERE session_id IN (SELECT id FROM presentation_sessions WHERE presentation_id = ?)`,
+    ).bind(id),
+    env.DB.prepare(
+      `DELETE FROM feedback_fields WHERE slide_id IN (SELECT id FROM slides WHERE presentation_id = ?)`,
+    ).bind(id),
+    env.DB.prepare(`DELETE FROM default_questions WHERE presentation_id = ?`).bind(id),
+    env.DB.prepare(`DELETE FROM slides WHERE presentation_id = ?`).bind(id),
+    env.DB.prepare(`DELETE FROM presentation_sessions WHERE presentation_id = ?`).bind(id),
+    env.DB.prepare(`DELETE FROM presentation_files WHERE event_id = ?`).bind(id),
+    env.DB.prepare(`DELETE FROM presentations WHERE id = ?`).bind(id),
+    env.DB.prepare(`DELETE FROM sessions WHERE event_id = ?`).bind(id),
+    env.DB.prepare(`DELETE FROM events WHERE id = ?`).bind(id),
+  ]);
+
+  // R2 cleanup — re-uploads add extra keys under the same prefix, so list
+  // everything and delete each object rather than relying on one stored key.
+  const listed = await env.PRESENTATION_BUCKET.list({ prefix: `presentations/${id}/` });
+  await Promise.all(
+    listed.objects.map((obj) => env.PRESENTATION_BUCKET.delete(obj.key)),
+  );
+
+  return true;
+}
+
 // Phase 7 — poll status endpoint (the upload UI can show a "processing..."
 // state if a re-upload is in flight).
 export async function getPresentationStatus(env: Env, presentationId: string): Promise<PresentationFileRow | null> {

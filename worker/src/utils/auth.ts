@@ -53,11 +53,9 @@ export const adminGuard = createMiddleware<{ Bindings: Env }>(async (c, next) =>
     return;
   }
 
-  // Local dev: signed session cookie fallback.
-  const cookieHeader = c.req.header('Cookie');
-  const token = readCookie(cookieHeader, 'admin_token');
-  const payload = token ? await verifyToken(token, c.env.SESSION_SECRET) : null;
-  if (!payload) {
+  // Accepts either legacy admin cookie or Google OAuth user JWT.
+  const u = await currentUser(c);
+  if (!u) {
     return c.json({ error: 'UNAUTHORIZED' }, 401);
   }
   await next();

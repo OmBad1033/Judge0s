@@ -221,6 +221,17 @@ export default function ControlSession() {
               {copied ? 'check' : 'content_copy'}
             </span>
           </button>
+          {(isLive || isPaused) && (
+            <button
+              onClick={() => endMut.mutate()}
+              disabled={endMut.isPending}
+              className="term-button-danger min-h-[44px] hidden lg:inline-flex"
+              aria-label="End session"
+            >
+              <span className="material-symbols-outlined text-[18px]">stop</span>
+              <span>End_Session</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -302,21 +313,39 @@ export default function ControlSession() {
                 />
               )}
 
-              <div className="bg-surface-1 aspect-video flex flex-col items-center justify-center text-center p-6">
-                {slide?.title ? (
-                  <h3 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mb-2">
-                    {slide.title}
-                  </h3>
-                ) : (
-                  <h3 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mb-2">
-                    Slide {String(current).padStart(2, '0')}
-                  </h3>
-                )}
-                {slide?.summary ? (
-                  <p className="font-body text-body text-on-surface-variant max-w-2xl">{slide.summary}</p>
-                ) : (
-                  <p className="font-mono text-body text-muted">No_Content</p>
-                )}
+              <div className="relative bg-surface-1">
+                <button
+                  onClick={() => slideMut.mutate(Math.max(1, current - 1))}
+                  disabled={busy || current <= 1}
+                  className="hidden lg:flex absolute left-2 top-1/2 -translate-y-1/2 z-10 border border-border bg-surface/90 hover:bg-surface min-h-[44px] min-w-[44px] items-center justify-center"
+                  aria-label="Previous slide"
+                >
+                  <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+                </button>
+                <button
+                  onClick={() => slideMut.mutate(Math.min(max, current + 1))}
+                  disabled={busy || current >= max}
+                  className="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 z-10 border border-border bg-surface/90 hover:bg-surface min-h-[44px] min-w-[44px] items-center justify-center"
+                  aria-label="Next slide"
+                >
+                  <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+                </button>
+                <div className="aspect-video flex flex-col items-center justify-center text-center p-6">
+                  {slide?.title ? (
+                    <h3 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mb-2">
+                      {slide.title}
+                    </h3>
+                  ) : (
+                    <h3 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mb-2">
+                      Slide {String(current).padStart(2, '0')}
+                    </h3>
+                  )}
+                  {slide?.summary ? (
+                    <p className="font-body text-body text-on-surface-variant max-w-2xl">{slide.summary}</p>
+                  ) : (
+                    <p className="font-mono text-body text-muted">No_Content</p>
+                  )}
+                </div>
               </div>
 
               {/* Progress bar (desktop only — mobile uses the bottom-anchored controls). */}

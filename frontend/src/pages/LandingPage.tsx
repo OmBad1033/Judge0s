@@ -21,9 +21,9 @@ export default function LandingPage() {
             <Link to="/join" className="term-button-secondary !text-[0.6875rem] !px-3 !py-1.5">
               Join_Session
             </Link>
-            <Link to="/admin/login" className="term-button-primary !text-[0.6875rem] !px-3 !py-1.5">
-              Enter_Admin
-            </Link>
+            <a href="/api/auth/google/start" className="term-button-primary !text-[0.6875rem] !px-3 !py-1.5">
+              Login
+            </a>
           </div>
         </div>
         <div className="h-px scan-sweep" />
@@ -52,10 +52,10 @@ export default function LandingPage() {
             post-mortem as structured JSON before you leave the room.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link to="/admin/login" className="term-button-primary">
+            <a href="/api/auth/google/start" className="term-button-primary">
               <span className="material-symbols-outlined text-[18px]">login</span>
-              <span>Enter_Admin</span>
-            </Link>
+              <span>Login</span>
+            </a>
             <Link to="/join" className="term-button-secondary">
               <span className="material-symbols-outlined text-[18px]">cast</span>
               <span>Join_Session</span>

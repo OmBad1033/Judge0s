@@ -53,8 +53,36 @@ app.get('/:code', async (c) => {
   return c.json(session);
 });
 
+// FR-1 — Deep-link-friendly session lookup. Public; returns 404 if not found.
+app.get('/:code/join-info', async (c) => {
+  const session = await sessionService.getSession(c.env, c.req.param('code')!);
+  if (!session) return c.json({ error: 'NOT_FOUND' }, 404);
+  const isEnded = session.status === 'ended';
+  return c.json({
+    sessionCode: session.sessionCode,
+    status: session.status,
+    presentationTitle: session.presentationTitle,
+    joinable: !isEnded,
+    reason: isEnded ? 'ENDED' : null,
+  });
+});
+
 app.post('/:code/start', adminGuard, async (c) => {
   const result = await sessionService.startSession(c.env, c.req.param('code')!);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
+  return c.json(result.session);
+});
+
+// FR-4 — Pause live session.
+app.post('/:code/pause', adminGuard, async (c) => {
+  const result = await sessionService.pauseSession(c.env, c.req.param('code')!);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
+  return c.json(result.session);
+});
+
+// FR-4 — Resume paused session.
+app.post('/:code/resume', adminGuard, async (c) => {
+  const result = await sessionService.resumeSession(c.env, c.req.param('code')!);
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.session);
 });
@@ -106,7 +134,7 @@ app.get('/:code/current-slide', async (c) => {
   return c.json(event);
 });
 
-// P1 §3.3 — atomic participant bootstrap (session + canonical event + responses).
+// P1 §3.3 & FR-2 — atomic participant bootstrap (session + canonical event + responses + previous slides).
 app.get('/:code/participant-state', async (c) => {
   const code = c.req.param('code')!;
   const participantId = c.req.query('participantId') ?? '';
@@ -126,6 +154,14 @@ app.get('/:code/participant-state', async (c) => {
       ? responses.find((r) => r.slideNumber === session.currentSlideNumber) ?? null
       : null;
 
+  const previousSlides = Array.from({ length: session.slideCount }, (_, i) => {
+    const slideNumber = i + 1;
+    const hasResponse =
+      responses.some((r) => r.slideNumber === slideNumber) ||
+      defaultResponses.some((dr) => dr.slideNumber === slideNumber);
+    return { slideNumber, hasResponse };
+  });
+
   return c.json({
     session: {
       sessionCode: session.sessionCode,
@@ -137,12 +173,13 @@ app.get('/:code/participant-state', async (c) => {
     existingResponse,
     responses,
     defaultResponses,
+    participantId: participant.id,
+    serverTime: new Date().toISOString(),
+    previousSlides,
   });
 });
 
-// Phase 5 — mobile reconnect fallback (per backend_plan.md addendum).
-// Cheap, no-DB-touch when possible; returns the same shape as participant-state
-// for a known participant (or the lobby payload when the session is pending).
+// Phase 5 & FR-2 — mobile reconnect fallback (per backend_plan.md addendum).
 app.get('/:code/state', async (c) => {
   const code = c.req.param('code')!;
   const participantId = c.req.query('participantId') ?? '';
@@ -173,6 +210,14 @@ app.get('/:code/state', async (c) => {
       ? responses.find((r) => r.slideNumber === session.currentSlideNumber) ?? null
       : null;
 
+  const previousSlides = Array.from({ length: session.slideCount }, (_, i) => {
+    const slideNumber = i + 1;
+    const hasResponse =
+      responses.some((r) => r.slideNumber === slideNumber) ||
+      defaultResponses.some((dr) => dr.slideNumber === slideNumber);
+    return { slideNumber, hasResponse };
+  });
+
   return c.json({
     session: {
       sessionCode: session.sessionCode,
@@ -184,7 +229,17 @@ app.get('/:code/state', async (c) => {
     existingResponse,
     responses,
     defaultResponses,
+    participantId: participant.id,
+    serverTime: new Date().toISOString(),
+    previousSlides,
   });
+});
+
+// FR-5 — Real participant activity list (admin only).
+app.get('/:code/participants', adminGuard, async (c) => {
+  const list = await participantService.listSessionParticipants(c.env, c.req.param('code')!);
+  if (!list) return c.json({ error: 'NOT_FOUND' }, 404);
+  return c.json({ participants: list });
 });
 
 // Default-question feedback (interested / 0-10 rating) for the current slide.
@@ -250,6 +305,13 @@ app.get('/:code/feedback/me', async (c) => {
 app.get('/:code/export', adminGuard, async (c) => {
   const data = await exportService.exportSession(c.env, c.req.param('code')!);
   if (!data) return c.json({ error: 'NOT_FOUND' }, 404);
+  if (c.req.query('format') === 'csv') {
+    const csv = exportService.sessionToCSV(data);
+    return c.text(csv, 200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="session-${data.session.code}.csv"`,
+    });
+  }
   return c.json(data);
 });
 

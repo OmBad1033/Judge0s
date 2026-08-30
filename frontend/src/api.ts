@@ -67,7 +67,13 @@ export interface PutSlideBody {
 export const api = {
   adminLogin: (password: string) => json<{ ok: boolean }>('/api/admin/login', 'POST', { password }),
   adminMe: () => json<{ ok: boolean }>('/api/admin/me', 'GET'),
-  adminLogout: () => json<{ ok: boolean }>('/api/admin/logout', 'POST'),
+  adminLogout: async () => {
+    await Promise.allSettled([
+      fetch('/api/admin/logout', { method: 'POST', credentials: 'include' }),
+      fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }),
+    ]);
+    return { ok: true };
+  },
 
   createPresentation: (data: { title: string; slideCount: number; file: File }) => {
     const form = new FormData();
@@ -82,6 +88,7 @@ export const api = {
     );
   },
   getPresentation: (id: string) => json<Presentation>(`/api/presentations/${id}`, 'GET'),
+  deletePresentation: (id: string) => json<{ ok: boolean }>(`/api/presentations/${id}`, 'DELETE'),
   listPresentations: () => json<{ presentations: PresentationSummary[] }>(`/api/presentations`, 'GET'),
   listSlides: (id: string) => json<SlidesResponse>(`/api/presentations/${id}/slides`, 'GET'),
   putSlide: (id: string, slideNumber: number, body: PutSlideBody) =>
