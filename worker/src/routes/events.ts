@@ -91,12 +91,25 @@ app.post('/:id/presentation', requireUser, async (c) => {
   if (!ev) return c.json({ error: 'NOT_FOUND' }, 404);
   const form = await c.req.formData();
   const title = String(form.get('title') ?? '').trim();
-  const slideCount = Number(form.get('slideCount'));
+  const slideCountRaw = form.get('slideCount');
   const file = form.get('file') as File | string | null;
   if (!title) return c.json({ error: 'TITLE_REQUIRED' }, 400);
-  if (!Number.isInteger(slideCount) || slideCount < 1) return c.json({ error: 'INVALID_SLIDE_COUNT' }, 400);
   if (file === null || typeof file === 'string') return c.json({ error: 'FILE_REQUIRED' }, 400);
-  if (!/\.pptx$/i.test(file.name)) return c.json({ error: 'INVALID_FILE_TYPE' }, 400);
+  if (!/\.(pptx|pdf)$/i.test(file.name)) return c.json({ error: 'INVALID_FILE_TYPE' }, 400);
+
+  const isPdf = /\.pdf$/i.test(file.name);
+  let slideCount: number | undefined;
+  if (isPdf) {
+    if (slideCountRaw !== null && slideCountRaw !== '') {
+      const n = Number(slideCountRaw);
+      if (Number.isInteger(n) && n >= 1) slideCount = n;
+    }
+  } else {
+    const n = Number(slideCountRaw);
+    if (!Number.isInteger(n) || n < 1) return c.json({ error: 'INVALID_SLIDE_COUNT' }, 400);
+    slideCount = n;
+  }
+
   const user = c.get('user');
   const p = await presentationService.createPresentation(
     c.env,
