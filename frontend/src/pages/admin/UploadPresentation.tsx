@@ -31,6 +31,8 @@ export default function UploadPresentation() {
   const [uploadErr, setUploadErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const isPdf = file ? /\.pdf$/i.test(file.name) : false;
+
   const listQ = useQuery({
     queryKey: ['presentations'],
     queryFn: () => api.listPresentations().then((r) => r.presentations),
@@ -38,7 +40,11 @@ export default function UploadPresentation() {
 
   const createMut = useMutation({
     mutationFn: () =>
-      api.createPresentation({ title, slideCount: Number(slideCount), file: file! }),
+      api.createPresentation({
+        title,
+        ...(isPdf ? {} : { slideCount: Number(slideCount) }),
+        file: file!,
+      }),
     onSuccess: (p) => {
       toast.push('success', 'Presentation uploaded');
       queryClient.invalidateQueries({ queryKey: ['presentations'] });
@@ -54,7 +60,7 @@ export default function UploadPresentation() {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!file) {
-      setUploadErr('Select a .pptx file');
+      setUploadErr('Select a .pptx or .pdf file');
       return;
     }
     setUploadErr('');
@@ -70,7 +76,7 @@ export default function UploadPresentation() {
             Presentation Library
           </h1>
           <p className="font-body text-body text-on-surface-variant mt-1">
-            Upload, configure, and run live feedback sessions.
+            Upload, configure, and run live feedback sessions. PDFs are auto-extracted.
           </p>
         </div>
         <button onClick={() => setOpen(true)} className="term-button-primary min-h-[44px]">
@@ -96,6 +102,7 @@ export default function UploadPresentation() {
           title={title}
           slideCount={slideCount}
           file={file}
+          isPdf={isPdf}
           busy={createMut.isPending}
           err={uploadErr}
           fileRef={fileRef}
@@ -124,7 +131,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         No presentations yet
       </h2>
       <p className="font-body text-body text-on-surface-variant mt-2 mb-6">
-        Upload your first .pptx to begin a feedback session.
+        Upload your first .pptx or .pdf to begin a feedback session.
       </p>
       <button onClick={onCreate} className="term-button-primary mx-auto min-h-[44px]">
         <span className="material-symbols-outlined text-[18px]">add</span>
@@ -171,6 +178,7 @@ function UploadModal({
   title,
   slideCount,
   file,
+  isPdf,
   busy,
   err,
   fileRef,
@@ -183,6 +191,7 @@ function UploadModal({
   title: string;
   slideCount: string;
   file: File | null;
+  isPdf: boolean;
   busy: boolean;
   err: string;
   fileRef: React.RefObject<HTMLInputElement>;
@@ -192,6 +201,7 @@ function UploadModal({
   onClose: () => void;
   onSubmit: (e: FormEvent) => void;
 }) {
+  const showSlideCount = file !== null && !isPdf;
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/30 backdrop-blur-sm"
@@ -231,20 +241,6 @@ function UploadModal({
               placeholder="e.g. Q3 Strategy Review"
             />
           </div>
-          <div>
-            <label className="term-label block mb-1.5" htmlFor="upload-slide-count">
-              Slide_Count
-            </label>
-            <input
-              id="upload-slide-count"
-              type="number"
-              min="1"
-              className="term-input px-3 py-2.5 min-h-[44px]"
-              value={slideCount}
-              onChange={(e) => onSlideCount(e.target.value)}
-              required
-            />
-          </div>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -257,19 +253,35 @@ function UploadModal({
               </span>
             ) : (
               <span className="block font-mono text-micro uppercase tracking-[0.15em] text-muted mt-2">
-                {'>'} Drop .pptx here or click to browse
+                {'>'} Drop .pptx or .pdf here or click to browse
               </span>
             )}
             <input
               ref={fileRef}
               type="file"
-              accept=".pptx"
+              accept=".pptx,.pdf"
               className="hidden"
               onChange={(e) => onFile(e.target.files?.[0] ?? null)}
               required
               disabled={busy}
             />
           </button>
+          {showSlideCount && (
+            <div>
+              <label className="term-label block mb-1.5" htmlFor="upload-slide-count">
+                Slide_Count
+              </label>
+              <input
+                id="upload-slide-count"
+                type="number"
+                min="1"
+                className="term-input px-3 py-2.5 min-h-[44px]"
+                value={slideCount}
+                onChange={(e) => onSlideCount(e.target.value)}
+                required
+              />
+            </div>
+          )}
           {err && (
             <div className="font-mono text-micro uppercase tracking-[0.15em] text-danger">
               {'>'} {err}
