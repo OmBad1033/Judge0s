@@ -40,11 +40,11 @@ module.exports = {
         'margin-lg': '48px',
       },
       fontFamily: {
-        display: ['Inter', 'system-ui', 'sans-serif'],
-        body: ['Inter', 'system-ui', 'sans-serif'],
-        label: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-        'session-code': ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        display: ['Manrope', 'system-ui', 'sans-serif'],
+        body: ['Manrope', 'system-ui', 'sans-serif'],
+        label: ['Manrope', 'system-ui', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        'session-code': ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },
       fontSize: {
         display: ['2rem', { lineHeight: '1.15', letterSpacing: '-0.02em', fontWeight: '700' }],
