@@ -7,6 +7,7 @@ import ConfigureSlides from './pages/admin/ConfigureSlides';
 import PresentationSessions from './pages/admin/PresentationSessions';
 import ControlSession from './pages/admin/ControlSession';
 import SessionResults from './pages/admin/SessionResults';
+import SessionAnalytics from './pages/admin/SessionAnalytics';
 import JoinSession from './pages/user/JoinSession';
 import ViewSession from './pages/user/ViewSession';
 import NotFoundPage from './pages/NotFoundPage';
@@ -33,6 +34,10 @@ export default function App() {
         <Route
           path="/admin/sessions/:code/results"
           element={<AdminShell><SessionResults /></AdminShell>}
+        />
+        <Route
+          path="/admin/sessions/:code/analytics"
+          element={<AdminShell><SessionAnalytics /></AdminShell>}
         />
         {/* Deep-link from QR / shared URL: /join/:code auto-fills the form. */}
         <Route path="/join" element={<JoinSession />} />

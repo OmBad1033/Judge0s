@@ -3,7 +3,7 @@ import { newId, now } from '../utils/common';
 import * as sessionService from './sessionService';
 import * as slideService from './slideService';
 import * as participantService from './participantService';
-import { validateResponse, type StoredFeedbackRule } from '../validation/feedback';
+import { validateFieldResponse, validateResponse, type StoredFeedbackRule } from '../validation/feedback';
 
 export interface StoredResponse {
   id: string;
@@ -48,10 +48,26 @@ export async function submitFeedback(
 
   const slide = await slideService.getSlideByNumber(env, session.presentationId, slideNumber);
   if (!slide) return err('SLIDE_NOT_FOUND', 404);
-  const rule = slide.feedbackRule ?? disabledRule;
 
-  const vr = validateResponse(rule, rawResponse);
-  if (!vr.ok) return err(vr.error!, 400);
+  // Prefer the Phase 3 field (multi-select/rating/nps need the full field
+  // config). Fall back to the legacy rule for older single-field slides.
+  const fields = await slideService.getSlideFields(env, slide.id);
+  const rule = slide.feedbackRule ?? disabledRule;
+  const field = fields[0] ?? null;
+
+  let value: string | null;
+  if (field && field.fieldType !== 'text' && field.fieldType !== 'textarea') {
+    // The form-builder path understands all 7 field types; use it when the
+    // slide is configured via the new model.
+    const vr = validateFieldResponse(field, rawResponse);
+    if (!vr.ok) return err(vr.error!, 400);
+    value = vr.value ?? null;
+  } else {
+    // Legacy path (single boolean/select/text field via feedbackRule).
+    const vr = validateResponse(rule, rawResponse);
+    if (!vr.ok) return err(vr.error!, 400);
+    value = vr.value ?? null;
+  }
 
   const existing = await env.DB.prepare(
     'SELECT id FROM feedback_responses WHERE participant_id = ? AND slide_id = ?',
@@ -60,7 +76,6 @@ export async function submitFeedback(
     .first<{ id: string }>();
 
   const submittedAt = now();
-  const value = vr.value ?? null;
 
   let responseId: string;
   if (existing) {

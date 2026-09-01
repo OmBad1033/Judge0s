@@ -386,6 +386,10 @@ export default function ControlSession() {
                 <span className="material-symbols-outlined text-[16px]">analytics</span>
                 View_Results / Export
               </Link>
+              <Link to={`/admin/sessions/${code}/analytics`} className="term-button-secondary">
+                <span className="material-symbols-outlined text-[16px]">bar_chart</span>
+                Analytics
+              </Link>
             </div>
           </div>
 
@@ -562,6 +566,10 @@ export default function ControlSession() {
             <Link to={`/admin/sessions/${code}/results`} className="term-button-primary">
               <span className="material-symbols-outlined text-[16px]">analytics</span>
               View_Results &amp; Export
+            </Link>
+            <Link to={`/admin/sessions/${code}/analytics`} className="term-button-secondary">
+              <span className="material-symbols-outlined text-[16px]">bar_chart</span>
+              Analytics
             </Link>
             <Link to="/admin/presentations" className="term-button-secondary">
               Back_To_Library

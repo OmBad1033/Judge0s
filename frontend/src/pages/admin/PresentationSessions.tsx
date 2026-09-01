@@ -80,6 +80,9 @@ export default function PresentationSessions() {
 
   const presentation = presQ.data;
   const sessions = sessionsQ.data ?? [];
+  const latestEnded = [...sessions]
+    .filter((s) => s.status === 'ended')
+    .sort((a, b) => (b.endedAt ?? '').localeCompare(a.endedAt ?? ''))[0];
 
   return (
     <div className="flex flex-col gap-4">
@@ -120,6 +123,15 @@ export default function PresentationSessions() {
             <span className="material-symbols-outlined text-[18px]">edit</span>
             Configure
           </Link>
+          {latestEnded && (
+            <Link
+              to={`/admin/sessions/${latestEnded.sessionCode}/analytics`}
+              className="term-button-secondary min-h-[44px]"
+            >
+              <span className="material-symbols-outlined text-[18px]">analytics</span>
+              Analytics
+            </Link>
+          )}
           <button
             onClick={() => setShowNamePrompt(true)}
             disabled={startMut.isPending}
@@ -314,6 +326,7 @@ function SessionsTable({ sessions, presentation }: { sessions: Session[]; presen
             <th className="text-left px-4 py-3 font-normal hidden md:table-cell">Started</th>
             <th className="text-left px-4 py-3 font-normal hidden lg:table-cell">Ended</th>
             <th className="text-right px-4 py-3 font-normal">Open</th>
+            <th className="text-right px-4 py-3 font-normal hidden sm:table-cell">Analytics</th>
           </tr>
         </thead>
         <tbody>
@@ -351,6 +364,16 @@ function SessionsTable({ sessions, presentation }: { sessions: Session[]; presen
                 </td>
                 <td className="px-4 py-3 text-right">
                   <span className="material-symbols-outlined text-[18px] text-muted">chevron_right</span>
+                </td>
+                <td className="px-4 py-3 text-right hidden sm:table-cell">
+                  <Link
+                    to={`/admin/sessions/${s.sessionCode}/analytics`}
+                    onClick={(e) => e.stopPropagation()}
+                    title="View analytics"
+                    className="inline-flex items-center gap-1 font-mono text-micro uppercase tracking-[0.15em] text-muted hover:text-primary transition"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">analytics</span>
+                  </Link>
                 </td>
               </tr>
             );

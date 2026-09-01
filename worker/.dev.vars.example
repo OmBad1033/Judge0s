@@ -11,3 +11,9 @@ JWT_SECRET=another-random-secret
 
 # Phase 8 — comma-separated allowlist; defaults to local Vite origin
 ORIGIN_ALLOWLIST=http://localhost:5173
+
+# Analytics — OpenRouter LLM (theme clustering + sentiment for free text).
+# Set this to a real key in worker/.dev.vars (this example file is committed).
+# Model defaults to openai/gpt-4o-mini if OPENROUTER_MODEL is unset.
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=

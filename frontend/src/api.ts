@@ -16,6 +16,7 @@ import type {
   JoinInfo,
   SessionStatsEventV2,
   SessionParticipant,
+  SessionAnalytics,
 } from './types';
 
 export class ApiError extends Error {
@@ -66,7 +67,12 @@ export interface PutSlideBody {
 
 export const api = {
   adminLogin: (password: string) => json<{ ok: boolean }>('/api/admin/login', 'POST', { password }),
-  adminMe: () => json<{ ok: boolean }>('/api/admin/me', 'GET'),
+  adminMe: () =>
+    json<{
+      ok: boolean;
+      role?: 'admin' | 'user';
+      user?: { id: string; email: string; name: string | null; avatarUrl: string | null; isSuperAdmin: boolean };
+    }>('/api/auth/me', 'GET'),
   adminLogout: async () => {
     await Promise.allSettled([
       fetch('/api/admin/logout', { method: 'POST', credentials: 'include' }),
@@ -144,6 +150,10 @@ export const api = {
 
   // FR-6 — Direct CSV download URL (lets the browser handle the download).
   exportSessionCsvUrl: (code: string) => `/api/sessions/${code}/export?format=csv`,
+
+  // Post-session analytics dashboard.
+  sessionAnalytics: (code: string) => json<SessionAnalytics>(`/api/sessions/${code}/analytics`, 'GET'),
+  runSessionAi: (code: string) => json<SessionAnalytics>(`/api/sessions/${code}/analytics/ai`, 'POST'),
 
   // Acknowledgement of the latest live-stats broadcast shape.
   acknowledgeStats: (stats: SessionStatsEventV2) => stats,

@@ -2,17 +2,23 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import { api } from '../api';
 
-// Desktop-first admin shell — sticky left sidebar with the brand, primary
-// nav, and logout; content area on the right. On mobile the sidebar collapses
-// into a top bar with a single "Library" link.
+// Admin shell with a top dock (SaaS-style): brand + signed-in user's name on
+// the left, primary nav (Library, New Presentation) in the middle, logout on
+// the right. Content renders below the bar.
 export default function AdminShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [state, setState] = useState<'loading' | 'ok' | 'unauth'>('loading');
+  const [userName, setUserName] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
   useEffect(() => {
     api
       .adminMe()
-      .then(() => setState('ok'))
+      .then((res) => {
+        setUserName(res.user?.name ?? null);
+        setUserAvatar(res.user?.avatarUrl ?? null);
+        setState('ok');
+      })
       .catch(() => setState('unauth'));
   }, []);
 
@@ -39,18 +45,51 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background text-on-surface font-body flex flex-col">
-      <header className="sticky top-0 z-50 bg-surface border-b border-border lg:hidden">
-        <div className="h-14 px-4 flex items-center justify-between gap-3">
-          <NavLink to="/admin/presentations" className="font-mono text-label uppercase tracking-[0.15em]">
+      <header className="sticky top-0 z-50 bg-surface border-b border-border">
+        <div className="h-14 px-4 md:px-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+          {/* Brand (top-left) */}
+          <NavLink
+            to="/admin/presentations"
+            className="justify-self-start font-mono text-label uppercase tracking-[0.15em] shrink-0 hover:text-primary transition"
+          >
             Judge_OS<span className="text-muted">:v1.0</span>
           </NavLink>
-          <div className="flex items-center gap-2">
-            <NavLink
-              to="/admin/presentations"
-              className="font-mono text-micro uppercase tracking-[0.15em] text-muted hover:text-on-surface"
+
+          {/* Primary nav (center) */}
+          <nav className="flex items-center gap-1 md:gap-2 justify-self-center">
+            <TopBarLink to="/admin/presentations" icon="library_books" label="Library" exact />
+            <TopBarLink to="/admin/presentations" icon="add_circle" label="New Presentation" />
+            <span
+              aria-disabled="true"
+              title="Coming soon"
+              className="group flex items-center gap-2 px-3 py-2 rounded font-mono text-label uppercase tracking-[0.15em] text-muted/40 select-none cursor-not-allowed"
             >
-              Library
-            </NavLink>
+              <span className="material-symbols-outlined text-[18px] transition-transform duration-300 group-hover:rotate-12">
+                gavel
+              </span>
+              <span>Judge</span>
+            </span>
+          </nav>
+
+          {/* User identity + logout (top-right) */}
+          <div className="flex items-center gap-3 justify-self-end shrink-0">
+            <span className="hidden sm:flex items-center gap-2 min-w-0 text-muted">
+              {userAvatar ? (
+                <img
+                  src={userAvatar}
+                  alt=""
+                  className="w-6 h-6 rounded-full shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="w-6 h-6 rounded-full bg-primary-dim text-primary flex items-center justify-center font-mono text-micro uppercase shrink-0">
+                  {(userName ?? 'A').slice(0, 1)}
+                </span>
+              )}
+              <span className="truncate font-mono text-label uppercase tracking-[0.15em]">
+                {userName ?? 'Admin'}
+              </span>
+            </span>
             <button
               onClick={logout}
               className="w-9 h-9 inline-flex items-center justify-center text-muted hover:text-on-surface"
@@ -63,35 +102,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         <div className="h-px scan-sweep" />
       </header>
 
-      <div className="flex-1 flex">
-        {/* Desktop sidebar */}
-        <aside className="hidden lg:flex w-60 shrink-0 border-r border-border bg-surface flex-col">
-          <NavLink
-            to="/admin/presentations"
-            className="h-14 flex items-center px-5 border-b border-border font-mono text-label uppercase tracking-[0.15em] hover:text-primary transition"
-          >
-            Judge_OS<span className="text-muted">:v1.0</span>
-          </NavLink>
-          <nav className="flex-1 p-3 flex flex-col gap-1">
-            <SidebarLink to="/admin/presentations" icon="library_books" label="Library" exact />
-            <SidebarLink to="/admin/presentations" icon="add_circle" label="New Presentation" />
-          </nav>
-          <div className="p-3 border-t border-border flex flex-col gap-1">
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 px-3 py-2 font-mono text-label uppercase tracking-[0.15em] text-muted hover:text-on-surface hover:bg-surface-1 transition"
-            >
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-              <span>Logout</span>
-            </button>
-          </div>
-          <div className="px-3 py-2 border-t border-border font-mono text-micro uppercase tracking-[0.18em] text-muted">
-            Sync.Time {new Date().toISOString().slice(11, 19)}Z
-          </div>
-        </aside>
-
-        <main className="flex-1 min-w-0 px-4 md:px-6 py-6 max-w-[1280px] w-full mx-auto">{children}</main>
-      </div>
+      <main className="flex-1 min-w-0 px-4 md:px-6 py-6 max-w-[1280px] w-full mx-auto">{children}</main>
 
       <footer className="border-t border-border bg-surface">
         <div className="max-w-[1280px] mx-auto px-4 md:px-6 h-8 flex items-center justify-between font-mono text-micro uppercase tracking-[0.18em] text-muted">
@@ -103,7 +114,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   );
 }
 
-function SidebarLink({
+function TopBarLink({
   to,
   icon,
   label,
@@ -119,15 +130,37 @@ function SidebarLink({
       to={to}
       end={exact}
       className={({ isActive }) =>
-        `flex items-center gap-2 px-3 py-2 font-mono text-label uppercase tracking-[0.15em] transition ${
+        `group relative flex items-center gap-2 px-3 py-2 font-mono text-label uppercase tracking-[0.15em] transition ${
           isActive
-            ? 'bg-primary-dim text-primary border-l-2 border-primary'
-            : 'text-muted hover:text-on-surface hover:bg-surface-1 border-l-2 border-transparent'
+            ? 'text-primary'
+            : 'text-muted hover:text-on-surface'
         }`
       }
     >
-      <span className="material-symbols-outlined text-[18px]">{icon}</span>
-      <span>{label}</span>
+      {({ isActive }) => (
+        <>
+          <span
+            className={`material-symbols-outlined text-[18px] transition-all duration-300 ${
+              isActive
+                ? 'fill scale-110 -translate-x-0.5'
+                : 'group-hover:-translate-x-0.5 group-hover:scale-110'
+            }`}
+          >
+            {icon}
+          </span>
+          <span className="relative">
+            {label}
+            <span
+              aria-hidden="true"
+              className={`absolute -bottom-1 left-0 h-px bg-primary transition-all duration-300 ease-out ${
+                isActive
+                  ? 'w-full opacity-100'
+                  : 'w-0 opacity-0 group-hover:w-full group-hover:opacity-60'
+              }`}
+            />
+          </span>
+        </>
+      )}
     </NavLink>
   );
 }
