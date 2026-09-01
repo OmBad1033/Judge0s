@@ -4,9 +4,10 @@
   "private": true,
   "description": "Live Presentation Feedback System — Cloudflare POC",
   "scripts": {
-    "dev": "pnpm -r --parallel run dev",
+    "dev": "pnpm run dev:worker",
     "dev:worker": "pnpm --filter worker dev",
     "dev:frontend": "pnpm --filter frontend dev",
+    "watch": "pnpm --dir ./frontend run build --watch",
     "typecheck": "pnpm -r run typecheck",
     "build": "pnpm -r run build"
   },

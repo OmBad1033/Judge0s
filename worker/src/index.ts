@@ -69,7 +69,12 @@ app.get('/ws/session/:code', (c) => {
 });
 
 // Single-unit frontend: serve static assets / SPA for everything else.
-app.get('*', (c) => c.env.ASSETS.fetch(c.req.raw));
+// In local dev (wrangler.dev.jsonc) there is no ASSETS binding — the Vite
+// dev server serves the frontend and proxies /api and /ws to this worker.
+app.get('*', (c) => {
+  if (!c.env.ASSETS) return c.text('Not Found', 404);
+  return c.env.ASSETS.fetch(c.req.raw);
+});
 
 export default app;
 export { SessionRoom };

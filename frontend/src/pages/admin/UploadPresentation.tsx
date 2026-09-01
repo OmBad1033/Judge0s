@@ -81,7 +81,7 @@ export default function UploadPresentation() {
         </div>
         <button onClick={() => setOpen(true)} className="term-button-primary min-h-[44px]">
           <span className="material-symbols-outlined text-[18px]">add</span>
-          Ingest_Presentation
+          Event
         </button>
       </div>
 
@@ -135,7 +135,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       </p>
       <button onClick={onCreate} className="term-button-primary mx-auto min-h-[44px]">
         <span className="material-symbols-outlined text-[18px]">add</span>
-        Ingest_Presentation
+          Event
       </button>
     </div>
   );
@@ -218,7 +218,7 @@ function UploadModal({
       <div className="term-card w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center border-b border-border px-5 py-4">
           <div>
-            <div className="term-label">[Ingest_Presentation]</div>
+            <div className="term-label">[Event]</div>
             <h2 id="upload-title" className="font-mono text-h1 text-on-surface mt-1">
               Upload Presentation
             </h2>

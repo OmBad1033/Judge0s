@@ -2,7 +2,7 @@ export interface Env {
   DB: D1Database;
   PRESENTATION_BUCKET: R2Bucket;
   PRESENTATION_SESSION: DurableObjectNamespace;
-  ASSETS: Fetcher;
+  ASSETS?: Fetcher;
 
   // Legacy password admin path (Phase 0). Still supported for local dev.
   ADMIN_PASSWORD: string;
