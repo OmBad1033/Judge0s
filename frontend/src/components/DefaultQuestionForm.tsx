@@ -11,9 +11,8 @@ interface Props {
 export default function DefaultQuestionForm({ question, value, onChange }: Props) {
   return (
     <div className="term-card">
-      <div className="px-4 pt-4 pb-3 border-b border-border flex items-center gap-2">
-        <span className="font-mono text-micro uppercase tracking-[0.18em] text-primary">[Default_Query]</span>
-        <p className="font-mono text-body text-on-surface leading-snug flex-1">{question.questionText}</p>
+      <div className="px-4 pt-4 pb-3 border-b border-border">
+        <p className="font-mono text-body text-on-surface leading-snug">{question.questionText}</p>
       </div>
 
       {question.questionType === 'interested' && (

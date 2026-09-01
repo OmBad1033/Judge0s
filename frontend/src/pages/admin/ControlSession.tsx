@@ -3,12 +3,14 @@ import { useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api';
 import { usePresentationSocket } from '../../usePresentationSocket';
-import type { Session, ControlState, SessionParticipant } from '../../types';
+import type { Session, ControlState, SessionParticipant, SlideEventRule } from '../../types';
 import { liveAggregate } from '../../lib/metrics';
 import { useToast } from '../../lib/toast';
 import ConnectionStatus from '../../components/ConnectionStatus';
 import SessionQRCode from '../../components/SessionQRCode';
 import Skeleton from '../../components/Skeleton';
+import FeedbackForm from '../../components/FeedbackForm';
+import DefaultQuestionForm from '../../components/DefaultQuestionForm';
 
 // Admin's "remote control" for a live session. Mobile-first by default:
 //   • Big bottom-anchored Prev/Next/Pause/End bar
@@ -116,6 +118,17 @@ export default function ControlSession() {
     refetchInterval: 10_000,
   });
 
+  // Live "User View" preview — the admin's socket doesn't receive the rich
+  // slide payload (that goes to participants), so we poll the same
+  // current-slide endpoint the participant REST bootstrap uses.
+  const currentSlideQ = useQuery({
+    queryKey: ['current-slide', code],
+    queryFn: () => api.currentSlide(code!),
+    enabled: !!code && (session?.status === 'live' || session?.status === 'paused'),
+    refetchInterval: (q) => (q.state.data ? 5_000 : 10_000),
+    refetchOnWindowFocus: false,
+  });
+
   const copyCode = async () => {
     if (!session) return;
     try {
@@ -167,6 +180,15 @@ export default function ControlSession() {
   const participantCount = stats?.participantCount ?? controlQ.data?.participantCount ?? 0;
   const currentResponses = stats?.currentSlideResponseCount ?? controlQ.data?.currentSlideResponseCount ?? 0;
   const score = liveAggregate(participantCount, currentResponses);
+
+  // Live participant preview — prefer the polled current-slide payload (rich:
+  // slide + feedbackRule + defaultQuestions). The WS event for admins only
+  // carries the slide number, so it's a fallback for the slide number.
+  const liveEvent = currentSlideQ.data ?? event;
+  const liveRule: SlideEventRule | null =
+    liveEvent?.type === 'SLIDE_CHANGED' ? (liveEvent.feedbackRule ?? null) : null;
+  const liveDefaultQuestions = liveEvent?.type === 'SLIDE_CHANGED' ? (liveEvent.defaultQuestions ?? []) : [];
+  const liveSlide = liveEvent?.type === 'SLIDE_CHANGED' ? (liveEvent.slide ?? undefined) : undefined;
 
   const isLive = session.status === 'live';
   const isDraft = session.status === 'draft';
@@ -359,7 +381,127 @@ export default function ControlSession() {
               </div>
             </div>
 
-            {/* Live stats — desktop always-on, mobile collapsible. */}
+            <div className="hidden lg:flex items-center gap-2">
+              <Link to={`/admin/sessions/${code}/results`} className="term-button-secondary">
+                <span className="material-symbols-outlined text-[16px]">analytics</span>
+                View_Results / Export
+              </Link>
+            </div>
+          </div>
+
+          {/* RIGHT — User View phone preview, with live stats + participants below. */}
+          <div className="lg:col-span-4 flex flex-col gap-4">
+            <div className="term-card">
+              <div className="border-b border-border px-4 py-2">
+                <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                  [User_View — Phone]
+                </span>
+              </div>
+              <div className="bg-surface-2 p-4 flex justify-center">
+                <div
+                  className="bg-surface border border-border w-[320px] max-w-full shadow-hairline"
+                  style={{ borderRadius: '24px' }}
+                >
+                  {/* Phone "notch" decoration */}
+                  <div className="flex justify-center pt-2">
+                    <span className="block w-16 h-1 bg-border-strong" style={{ borderRadius: '2px' }} />
+                  </div>
+
+                  {/* Inner screen: replicates ViewSession's mobile column. */}
+                  <div className="relative overflow-hidden" style={{ borderRadius: '24px' }}>
+                    <div className="max-h-[560px] overflow-y-auto">
+                      <main className="flex flex-col px-4 pt-4 pb-32 gap-4">
+                        {/* Top status strip */}
+                        <header className="flex items-center justify-between border border-border bg-surface px-3 py-2">
+                          <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                            [Session_Id: {session.sessionCode}]
+                          </span>
+                          <ConnectionStatus state={connected ? 'connected' : 'reconnecting'} />
+                        </header>
+
+                        {/* Slide badge */}
+                        <div className="border border-border bg-surface px-3 py-2 flex items-center justify-between">
+                          <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                            [Active_Slide]
+                          </span>
+                          <span className="font-mono text-h1 text-on-surface">
+                            {String(current || 1).padStart(2, '0')}
+                          </span>
+                        </div>
+
+                        {/* Slide card */}
+                        <div className="border border-border bg-surface">
+                          <div className="border-b border-border px-4 py-2">
+                            <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                              [Query_Data]
+                            </span>
+                          </div>
+                          <div className="px-4 py-4">
+                            {liveSlide?.title || liveSlide?.summary ? (
+                              <>
+                                {liveSlide?.title && (
+                                  <h1 className="font-mono text-h1 text-on-surface mb-px uppercase tracking-[-0.01em]">
+                                    {liveSlide.title}
+                                  </h1>
+                                )}
+                                {liveSlide?.summary && (
+                                  <p className="font-body text-body text-on-surface-variant mt-1">
+                                    {liveSlide.summary}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <div className="text-center py-4">
+                                <span className="material-symbols-outlined text-3xl text-muted">
+                                  visibility_off
+                                </span>
+                                <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
+                                  {'>'} No_Query
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Slide feedback form */}
+                        {liveRule?.enabled && liveRule.type !== 'disabled' ? (
+                          <FeedbackForm rule={liveRule} value="" onChange={() => {}} />
+                        ) : (
+                          <div className="border border-border bg-surface p-6 flex flex-col items-center justify-center text-center gap-2">
+                            <span className="material-symbols-outlined text-3xl text-muted">
+                              visibility_off
+                            </span>
+                            <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                              {'>'} Feedback is disabled for this slide.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Default questions */}
+                        {liveDefaultQuestions.map((dq) => (
+                          <DefaultQuestionForm key={dq.id} question={dq} value="" onChange={() => {}} />
+                        ))}
+                      </main>
+                    </div>
+
+                    {/* Bottom-anchored submit bar (mirrors ViewSession's fixed bar). */}
+                    <div
+                      className="absolute bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 pt-3"
+                      style={{ paddingBottom: '12px' }}
+                    >
+                      <div className="max-w-md mx-auto">
+                        <button type="button" disabled className="term-button-primary w-full !py-3.5 min-h-[48px]">
+                          <span>Submit_Response</span>
+                          <span className="material-symbols-outlined text-[18px]">send</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live stats — below the phone preview on desktop, collapsible on mobile. */}
             <div className={`term-card ${showStats ? '' : 'hidden lg:block'}`}>
               <button
                 onClick={() => setShowStats((v) => !v)}
@@ -396,16 +538,6 @@ export default function ControlSession() {
               )}
             </div>
 
-            <div className="hidden lg:flex items-center gap-2">
-              <Link to={`/admin/sessions/${code}/results`} className="term-button-secondary">
-                <span className="material-symbols-outlined text-[16px]">analytics</span>
-                View_Results / Export
-              </Link>
-            </div>
-          </div>
-
-          {/* RIGHT — participant table (desktop only) */}
-          <div className="hidden lg:block lg:col-span-4">
             <ParticipantList
               participants={participantsQ.data?.participants ?? []}
               participantCount={participantCount}

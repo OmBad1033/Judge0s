@@ -18,7 +18,6 @@ export default function FeedbackForm({ rule, value, onChange }: Props) {
     <div className="term-card">
       {rule.question && (
         <div className="px-4 pt-4 pb-3 border-b border-border">
-          <div className="term-label-strong mb-1.5">[Query]</div>
           <p className="font-mono text-body text-on-surface leading-snug">{rule.question}</p>
         </div>
       )}

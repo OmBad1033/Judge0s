@@ -10,7 +10,9 @@ import type {
 } from '../../types';
 import { useToast } from '../../lib/toast';
 import Skeleton from '../../components/Skeleton';
+import ConnectionStatus from '../../components/ConnectionStatus';
 import FeedbackForm from '../../components/FeedbackForm';
+import DefaultQuestionForm from '../../components/DefaultQuestionForm';
 
 const TYPES: { value: FeedbackType; label: string; icon: string }[] = [
   { value: 'disabled', label: 'None', icon: 'block' },
@@ -180,6 +182,8 @@ export default function ConfigureSlides() {
     options: d.type === 'multiple_choice' ? d.options : null,
     allowResubmission: d.allowResubmission,
   };
+
+  const previewDefaultQuestions = defaultQuestions.filter((q) => q.targetSlides.includes(active + 1));
 
   return (
     <>
@@ -373,7 +377,9 @@ export default function ConfigureSlides() {
           </div>
         </section>
 
-        {/* RIGHT — phone-shaped live preview */}
+        {/* RIGHT — phone-shaped live preview. Mirrors the participant's real
+            phone view (ViewSession): max-w-md column, same spacing/type scale,
+            bottom-anchored submit bar. */}
         <aside className="lg:col-span-4">
           <div className="term-label mb-2 px-1">[Preview_Hud — Mobile]</div>
           <div className="bg-surface-2 border border-border p-6 flex justify-center">
@@ -385,52 +391,100 @@ export default function ConfigureSlides() {
               <div className="flex justify-center pt-2">
                 <span className="block w-16 h-1 bg-border-strong" style={{ borderRadius: '2px' }} />
               </div>
-              <div className="p-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                    [Session_Id: ----]
-                  </span>
-                  <span className="font-mono text-micro uppercase tracking-[0.18em] text-primary">
-                    Live
-                  </span>
-                </div>
-                <div className="border border-border bg-surface">
-                  <div className="border-b border-border px-3 py-1.5">
-                    <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                      [Active_Slide {String(active + 1).padStart(2, '0')}]
-                    </span>
-                  </div>
-                  <div className="px-3 py-3">
-                    {d.title ? (
-                      <h3 className="font-mono text-h1 text-on-surface uppercase tracking-[-0.01em]">
-                        {d.title}
-                      </h3>
-                    ) : (
-                      <p className="font-mono text-body text-muted">No title</p>
-                    )}
-                    {d.summary ? (
-                      <p className="font-body text-body text-on-surface-variant mt-1.5">{d.summary}</p>
-                    ) : (
-                      <p className="font-mono text-body text-muted mt-1.5">No summary</p>
-                    )}
-                  </div>
-                </div>
-                {previewRule.enabled ? (
-                  <div>
-                    <FeedbackForm rule={previewRule} value="" onChange={() => {}} />
-                    <div className="mt-3 font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                      {previewRule.required ? 'Required' : 'Optional'} &nbsp;·&nbsp;{' '}
-                      {previewRule.allowResubmission ? 'Resubmission_Allowed' : 'One_Response'}
+
+              {/* Inner screen: replicate ViewSession's scrollable column exactly. */}
+              <div className="relative overflow-hidden" style={{ borderRadius: '24px' }}>
+                <div className="max-h-[560px] overflow-y-auto">
+                  <main className="flex flex-col px-4 pt-4 pb-32 gap-4">
+                    {/* Top status strip */}
+                    <header className="flex items-center justify-between border border-border bg-surface px-3 py-2">
+                      <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                        [Session_Id: ----]
+                      </span>
+                      <ConnectionStatus state="connected" />
+                    </header>
+
+                    {/* Slide badge */}
+                    <div className="border border-border bg-surface px-3 py-2 flex items-center justify-between">
+                      <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                        [Active_Slide]
+                      </span>
+                      <span className="font-mono text-h1 text-on-surface">
+                        {String(active + 1).padStart(2, '0')}
+                      </span>
                     </div>
+
+                    {/* Slide card */}
+                    <div className="border border-border bg-surface">
+                      <div className="border-b border-border px-4 py-2">
+                        <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                          [Query_Data]
+                        </span>
+                      </div>
+                      <div className="px-4 py-4">
+                        {d.title || d.summary ? (
+                          <>
+                            {d.title && (
+                              <h1 className="font-mono text-h1 text-on-surface mb-px uppercase tracking-[-0.01em]">
+                                {d.title}
+                              </h1>
+                            )}
+                            {d.summary && (
+                              <p className="font-body text-body text-on-surface-variant mt-1">
+                                {d.summary}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-center py-4">
+                            <span className="material-symbols-outlined text-3xl text-muted">
+                              visibility_off
+                            </span>
+                            <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
+                              {'>'} No_Query
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Slide feedback form */}
+                    {previewRule.enabled ? (
+                      <FeedbackForm rule={previewRule} value="" onChange={() => {}} />
+                    ) : (
+                      <div className="border border-border bg-surface p-6 flex flex-col items-center justify-center text-center gap-2">
+                        <span className="material-symbols-outlined text-3xl text-muted">
+                          visibility_off
+                        </span>
+                        <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                          {'>'} Feedback is disabled for this slide.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Default questions */}
+                    {previewDefaultQuestions.map((q) => (
+                      <DefaultQuestionForm key={q.id} question={q} value="" onChange={() => {}} />
+                    ))}
+                  </main>
+                </div>
+
+                {/* Bottom-anchored submit bar (mirrors ViewSession's fixed bar). */}
+                <div
+                  className="absolute bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 pt-3"
+                  style={{ paddingBottom: '12px' }}
+                >
+                  <div className="max-w-md mx-auto">
+                    <button
+                      type="button"
+                      disabled
+                      className="term-button-primary w-full !py-3.5 min-h-[48px]"
+                    >
+                      <span>Submit_Response</span>
+                      <span className="material-symbols-outlined text-[18px]">send</span>
+                    </button>
                   </div>
-                ) : (
-                  <div className="px-3 py-6 text-center border border-border bg-surface-1">
-                    <span className="material-symbols-outlined text-3xl text-muted">visibility_off</span>
-                    <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-                      No_Feedback_For_This_Slide
-                    </p>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
