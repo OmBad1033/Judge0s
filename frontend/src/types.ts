@@ -226,3 +226,70 @@ export interface PreviousSlideMarker {
 
 // Shared connection-state vocabulary used by both the participant and the admin live control room.
 export type ConnectionState = 'connected' | 'reconnecting' | 'disconnected' | 'ended';
+
+// --- Post-session analytics (SessionAnalytics page) ---
+
+export interface TextInsight {
+  themes: { name: string; count: number }[];
+  sentiment: 'positive' | 'neutral' | 'negative' | 'mixed';
+  sentimentScore: number; // -1..1
+  summary: string;
+}
+
+export type FieldStats =
+  | { kind: 'boolean'; yesCount: number; noCount: number; yesPct: number }
+  | { kind: 'single_select'; counts: Record<string, number> }
+  | {
+      kind: 'multi_select';
+      counts: Record<string, number>;
+      coOccurrence: Record<string, Record<string, number>>;
+    }
+  | { kind: 'rating'; distribution: Record<string, number>; average: number }
+  | { kind: 'nps'; distribution: Record<string, number>; average: number; nps: number }
+  | { kind: 'text'; responses: string[]; insight: TextInsight | null };
+
+export interface FieldAnalytics {
+  fieldId: string;
+  label: string;
+  fieldType: string;
+  options: string[] | null;
+  responseCount: number;
+  participantCount: number;
+  stats: FieldStats;
+}
+
+export interface SlideAnalytics {
+  slideNumber: number;
+  title: string | null;
+  summary: string;
+  fields: FieldAnalytics[];
+}
+
+export interface DefaultQuestionAnalytics {
+  id: string;
+  questionText: string;
+  questionType: string;
+  targetSlides: number[];
+  responseCount: number;
+  participantCount: number;
+  stats:
+    | { kind: 'interested'; interestedCount: number; notInterestedCount: number; interestedPct: number }
+    | { kind: 'rating'; distribution: Record<string, number>; average: number };
+}
+
+export interface SessionAnalytics {
+  session: {
+    code: string;
+    presentation: string;
+    status: string;
+    participantCount: number;
+    slideCount: number;
+    startedAt: string | null;
+    endedAt: string | null;
+  };
+  slides: SlideAnalytics[];
+  defaultQuestions: DefaultQuestionAnalytics[];
+  hasAi: boolean;
+  aiConfigured: boolean;
+  aiResults?: { fieldId: string; ok: boolean; error?: string }[];
+}

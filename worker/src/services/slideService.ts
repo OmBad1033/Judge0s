@@ -223,6 +223,17 @@ export async function getSlideByNumber(
   return row ? mapSlide(row) : null;
 }
 
+// Phase 3 — all feedback fields configured for a slide, in display order.
+export async function getSlideFields(env: Env, slideId: string): Promise<FeedbackField[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT id, slide_id, order_index, field_type, label, options_json, is_required, config_json
+     FROM feedback_fields WHERE slide_id = ? ORDER BY order_index`,
+  )
+    .bind(slideId)
+    .all<Record<string, unknown>>();
+  return results.map(mapField);
+}
+
 // Phase 3 — new form-builder API.
 export async function replaceSlideFields(
   env: Env,

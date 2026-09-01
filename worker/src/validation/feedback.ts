@@ -128,3 +128,91 @@ export function validateResponse(rule: StoredFeedbackRule, rawValue: unknown): V
       return { ok: false, error: 'FEEDBACK_DISABLED' };
   }
 }
+
+/**
+ * Validate a response against a Phase 3 `FeedbackField` (multi_select, rating,
+ * nps, boolean, single_select, text/textarea). The legacy `validateResponse`
+ * only understands the 4 legacy types, so this is the entry point used by the
+ * full form-builder path. Non-string types are serialized to JSON in
+ * `response_value`:
+ *   multi_select → JSON.stringify([...selected])
+ *   rating/nps   → JSON.stringify(number)
+ * boolean/single_select/text stay plain strings (backwards compatible).
+ */
+export function validateFieldResponse(
+  field: {
+    fieldType: FieldType;
+    label: string;
+    options: string[] | null;
+    isRequired: boolean;
+    config: Record<string, unknown>;
+  },
+  rawValue: unknown,
+): ValidationResult {
+  const empty = rawValue === null || rawValue === undefined || rawValue === '';
+  if (empty) {
+    if (field.isRequired) return { ok: false, error: 'RESPONSE_REQUIRED' };
+    return { ok: true, value: null };
+  }
+
+  const toNum = (v: unknown): number | null => {
+    const s = typeof v === 'string' ? v.trim() : v;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  switch (field.fieldType) {
+    case 'boolean': {
+      const v = typeof rawValue === 'string' ? rawValue.trim().toLowerCase() : '';
+      if (!['yes', 'no'].includes(v)) return { ok: false, error: 'INVALID_BOOLEAN' };
+      return { ok: true, value: v };
+    }
+    case 'single_select': {
+      const v = typeof rawValue === 'string' ? rawValue.trim() : '';
+      if (!(field.options ?? []).includes(v)) return { ok: false, error: 'INVALID_CHOICE' };
+      return { ok: true, value: v };
+    }
+    case 'multi_select': {
+      let arr: unknown[] = [];
+      if (Array.isArray(rawValue)) arr = rawValue;
+      else if (typeof rawValue === 'string') {
+        const trimmed = rawValue.trim();
+        try {
+          const parsed: unknown = JSON.parse(trimmed);
+          arr = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          arr = trimmed.length > 0 ? [trimmed] : [];
+        }
+      }
+      if (arr.length === 0) {
+        if (field.isRequired) return { ok: false, error: 'RESPONSE_REQUIRED' };
+        return { ok: true, value: null };
+      }
+      const opts = field.options ?? [];
+      const selected: string[] = [];
+      for (const item of arr) {
+        const s = String(item).trim();
+        if (!opts.includes(s)) return { ok: false, error: 'INVALID_CHOICE' };
+        if (!selected.includes(s)) selected.push(s);
+      }
+      return { ok: true, value: JSON.stringify(selected) };
+    }
+    case 'rating':
+    case 'nps': {
+      const n = toNum(rawValue);
+      if (n === null || !Number.isInteger(n)) return { ok: false, error: 'INVALID_RATING' };
+      const min = typeof field.config.min === 'number' ? field.config.min : 0;
+      const max = typeof field.config.max === 'number' ? field.config.max : 10;
+      if (n < min || n > max) return { ok: false, error: 'INVALID_RATING' };
+      return { ok: true, value: JSON.stringify(n) };
+    }
+    case 'text':
+    case 'textarea': {
+      const v = typeof rawValue === 'string' ? rawValue.trim() : '';
+      if (v.length > MAX_OPEN_TEXT_LENGTH) return { ok: false, error: 'RESPONSE_TOO_LONG' };
+      return { ok: true, value: v };
+    }
+    default:
+      return { ok: false, error: 'FEEDBACK_DISABLED' };
+  }
+}

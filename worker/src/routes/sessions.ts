@@ -7,6 +7,9 @@ import * as participantService from '../services/participantService';
 import * as feedbackService from '../services/feedbackService';
 import * as defaultResponseService from '../services/defaultResponseService';
 import * as exportService from '../services/exportService';
+import * as analyticsService from '../services/analyticsService';
+import * as openRouterService from '../services/openRouterService';
+import * as slideService from '../services/slideService';
 import { rateLimit } from '../services/rateLimit';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -329,6 +332,58 @@ app.get('/:code/export.csv', adminGuard, async (c) => {
     'Content-Type': 'text/csv; charset=utf-8',
     'Content-Disposition': `attachment; filename="session-${data.session.code}.csv"`,
   });
+});
+
+// Post-session analytics dashboard (per-slide aggregations + cached AI insights).
+app.get('/:code/analytics', adminGuard, async (c) => {
+  const data = await analyticsService.getSessionAnalytics(c.env, c.req.param('code')!);
+  if (!data) return c.json({ error: 'NOT_FOUND' }, 404);
+  return c.json(data);
+});
+
+// Run (or refresh) the OpenRouter theme-clustering + sentiment pass for every
+// text field in the session. Results are cached in D1 so later page loads are
+// free. Returns the full analytics payload with fresh insights.
+app.post('/:code/analytics/ai', adminGuard, async (c) => {
+  const code = c.req.param('code')!;
+  const session = await sessionService.getSession(c.env, code);
+  if (!session) return c.json({ error: 'NOT_FOUND' }, 404);
+  if (!c.env.OPENROUTER_API_KEY) {
+    return c.json({ error: 'AI_NOT_CONFIGURED' }, 400);
+  }
+
+  const slides = await slideService.listSlides(c.env, session.presentationId);
+  const results: { fieldId: string; ok: boolean; error?: string }[] = [];
+  for (const slide of slides) {
+    const fields = await slideService.getSlideFields(c.env, slide.id);
+    for (const f of fields) {
+      if (f.fieldType !== 'text' && f.fieldType !== 'textarea') continue;
+      const { results: respRows } = await c.env.DB.prepare(
+        `SELECT fr.response_value AS response_value
+         FROM feedback_responses fr
+         JOIN slides s ON s.id = fr.slide_id
+         WHERE fr.session_id = ? AND s.id = ?`,
+      )
+        .bind(session.id, slide.id)
+        .all<{ response_value: string | null }>();
+      const texts = respRows
+        .map((r) => r.response_value ?? '')
+        .filter((t) => t.trim().length > 0);
+      if (texts.length < 5) {
+        results.push({ fieldId: f.id, ok: false, error: 'NOT_ENOUGH_RESPONSES' });
+        continue;
+      }
+      try {
+        await openRouterService.getOrCreateInsight(c.env, f.id, texts);
+        results.push({ fieldId: f.id, ok: true });
+      } catch (e) {
+        results.push({ fieldId: f.id, ok: false, error: (e as Error).message });
+      }
+    }
+  }
+
+  const data = await analyticsService.getSessionAnalytics(c.env, code);
+  return c.json({ ...data, aiResults: results });
 });
 
 export default app;

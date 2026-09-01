@@ -20,4 +20,8 @@ export interface Env {
 
   // Phase 8 — CORS lockdown.
   ORIGIN_ALLOWLIST?: string;
+
+  // Analytics — OpenRouter LLM (theme clustering + sentiment for free text).
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_MODEL?: string;
 }

@@ -44,17 +44,6 @@ export default function SessionResults() {
     api.exportSession(code).then(setData).catch(() => setData(null));
   }, [code]);
 
-  const downloadJSON = () => {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `feedback-${data.session.code}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const downloadCSV = () => {
     if (!data) return;
     const blob = new Blob([toCSV(data)], { type: 'text/csv' });
@@ -112,10 +101,10 @@ export default function SessionResults() {
             <span className="material-symbols-outlined text-[16px]">download</span>
             Export_Csv
           </button>
-          <button onClick={downloadJSON} className="term-button-primary">
-            <span className="material-symbols-outlined text-[16px]">download</span>
-            Export_Json
-          </button>
+          <Link to={`/admin/sessions/${code}/analytics`} className="term-button-primary">
+            <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+            Analysis
+          </Link>
           <Link to={`/admin/sessions/${code}`} className="term-button-secondary">
             <span className="material-symbols-outlined text-[16px]">arrow_back</span>
             Back
