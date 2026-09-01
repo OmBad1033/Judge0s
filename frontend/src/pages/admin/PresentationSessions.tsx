@@ -18,6 +18,8 @@ export default function PresentationSessions() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [sessionName, setSessionName] = useState('');
 
   const presQ = useQuery({
     queryKey: ['presentation', id],
@@ -33,11 +35,13 @@ export default function PresentationSessions() {
   });
 
   const startMut = useMutation({
-    mutationFn: () => api.createSession(id),
+    mutationFn: () => api.createSession(id, sessionName.trim() || undefined),
     onSuccess: (s) => {
       toast.push('success', 'Session started');
       queryClient.invalidateQueries({ queryKey: ['sessions', id] });
       queryClient.invalidateQueries({ queryKey: ['presentations'] });
+      setShowNamePrompt(false);
+      setSessionName('');
       navigate(`/admin/sessions/${s.sessionCode}`);
     },
     onError: (e) =>
@@ -117,12 +121,12 @@ export default function PresentationSessions() {
             Configure
           </Link>
           <button
-            onClick={() => startMut.mutate()}
+            onClick={() => setShowNamePrompt(true)}
             disabled={startMut.isPending}
             className="term-button-primary min-h-[44px]"
           >
             <span className="material-symbols-outlined text-[18px]">play_arrow</span>
-            {startMut.isPending ? 'Starting...' : 'Start_Session'}
+            Start_Session
           </button>
         </div>
       </div>
@@ -131,9 +135,24 @@ export default function PresentationSessions() {
       {sessionsQ.isLoading ? (
         <Skeleton variant="list" rows={3} />
       ) : sessions.length === 0 ? (
-        <EmptySessions onStart={() => startMut.mutate()} busy={startMut.isPending} />
+        <EmptySessions onStart={() => setShowNamePrompt(true)} busy={startMut.isPending} />
       ) : (
         <SessionsTable sessions={sessions} presentation={presentation} />
+      )}
+
+      {showNamePrompt && (
+        <SessionNamePrompt
+          busy={startMut.isPending}
+          value={sessionName}
+          onChange={setSessionName}
+          onCancel={() => {
+            if (!startMut.isPending) {
+              setShowNamePrompt(false);
+              setSessionName('');
+            }
+          }}
+          onConfirm={() => startMut.mutate()}
+        />
       )}
 
       {confirmDelete && (
@@ -203,6 +222,70 @@ function DeleteConfirmModal({
   );
 }
 
+function SessionNamePrompt({
+  value,
+  onChange,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/30 backdrop-blur-sm"
+      onClick={() => !busy && onCancel()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="session-name-title"
+    >
+      <div className="term-card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="border-b border-border px-5 py-4">
+          <div className="term-label">[New_Session]</div>
+          <h2 id="session-name-title" className="font-mono text-h1 text-on-surface mt-1">
+            Name this session?
+          </h2>
+        </div>
+        <form
+          className="px-5 py-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onConfirm();
+          }}
+        >
+          <label className="term-label block mb-1.5" htmlFor="session-name-input">
+            Session_Name
+          </label>
+          <input
+            id="session-name-input"
+            autoFocus
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            maxLength={120}
+            placeholder="e.g. Q3 Board Review"
+            className="w-full h-11 px-3 border border-border bg-surface font-mono text-body text-on-surface placeholder:text-muted focus:border-primary focus:outline-none"
+          />
+          <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mt-3">
+            {'>'} You can leave this blank — we&apos;ll use the session code.
+          </p>
+          <div className="flex justify-end gap-2 border-t border-border px-5 py-4 -mx-5 -mb-5 mt-5">
+            <button type="button" onClick={onCancel} disabled={busy} className="term-button-secondary min-h-[44px]">
+              Cancel
+            </button>
+            <button type="submit" disabled={busy} className="term-button-primary min-h-[44px]">
+              {busy ? 'Starting...' : 'Start_Session'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function StatusPill({ status }: { status: Session['status'] }) {
   if (status === 'live') {
     return (
@@ -223,6 +306,7 @@ function SessionsTable({ sessions, presentation }: { sessions: Session[]; presen
       <table className="w-full font-mono text-label">
         <thead>
           <tr className="border-b border-border text-micro uppercase tracking-[0.18em] text-muted">
+            <th className="text-left px-4 py-3 font-normal">[Name]</th>
             <th className="text-left px-4 py-3 font-normal">[Code]</th>
             <th className="text-left px-4 py-3 font-normal">Status</th>
             <th className="text-left px-4 py-3 font-normal hidden sm:table-cell">Slide</th>
@@ -250,7 +334,8 @@ function SessionsTable({ sessions, presentation }: { sessions: Session[]; presen
                 }}
                 className="border-b border-border last:border-b-0 hover:bg-surface-1 cursor-pointer transition"
               >
-                <td className="px-4 py-3 text-on-surface">{s.sessionCode}</td>
+                <td className="px-4 py-3 text-on-surface">{s.name || s.sessionCode}</td>
+                <td className="px-4 py-3 text-muted">{s.sessionCode}</td>
                 <td className="px-4 py-3">
                   <StatusPill status={s.status} />
                 </td>

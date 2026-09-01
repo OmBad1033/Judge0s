@@ -1,6 +1,7 @@
 import type { Env } from '../env';
 import { newId, now } from '../utils/common';
 import { extractPdfSlides, type ExtractedPresentation } from './pdfExtraction';
+import { extractPptxSlides, deckToMarkdown } from './pptxExtraction';
 
 const PPTX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const PDF_CONTENT_TYPE = 'application/pdf';
@@ -29,6 +30,8 @@ export interface Presentation {
   uploadedBy?: string;
   // Set when the file is a PDF and per-page text was extracted.
   extractedJsonKey?: string | null;
+  // Set for PPTX — the Markdown rendering of the structured slide content.
+  extractedMdKey?: string | null;
 }
 
 function mapRow(r: Record<string, unknown>): Presentation {
@@ -43,6 +46,7 @@ function mapRow(r: Record<string, unknown>): Presentation {
     presentationFileId: (r.presentation_file_id as string) ?? undefined,
     uploadedBy: (r.uploaded_by as string) ?? undefined,
     extractedJsonKey: (r.extracted_json_key as string) ?? undefined,
+    extractedMdKey: (r.extracted_md_key as string) ?? undefined,
   };
 }
 
@@ -69,6 +73,7 @@ export interface PresentationFileRow {
   uploadedAt: string;
   errorMessage: string | null;
   extractedJsonKey: string | null;
+  extractedMdKey: string | null;
 }
 
 export async function createPresentation(
@@ -86,15 +91,22 @@ export async function createPresentation(
   const r2ObjectKey = `presentations/${id}/${input.file.name}`;
   const isPdf = isPdfFile(input.file.name);
 
-  // PDF: extract per-page text + count, and store the JSON next to the PDF.
-  // PPTX: keep the existing behaviour; the route supplies slideCount.
+  // Extract per-slide content + count from the uploaded file and store the
+  // JSON summary next to the original in R2. Both paths share the same
+  // { source, fileName, slideCount, extractedAt, slides[] } shape.
   let slideCount = input.slideCount;
-  let extracted: ExtractedPresentation | null = null;
+  let extracted: Awaited<ReturnType<typeof extractPdfSlides>> | Awaited<ReturnType<typeof extractPptxSlides>> | null = null;
   let extractedJsonKey: string | null = null;
+  let extractedMdKey: string | null = null;
   if (isPdf) {
     extracted = await extractPdfSlides(input.file);
     slideCount = extracted.slideCount;
     extractedJsonKey = `${r2ObjectKey}.extracted.json`;
+  } else {
+    extracted = await extractPptxSlides(input.file);
+    slideCount = extracted.slideCount;
+    extractedJsonKey = `${r2ObjectKey}.extracted.json`;
+    extractedMdKey = `${r2ObjectKey}.extracted.md`;
   }
 
   const contentType = contentTypeFor(input.file.name, input.file.type || PPTX_CONTENT_TYPE);
@@ -107,13 +119,29 @@ export async function createPresentation(
     await env.PRESENTATION_BUCKET.put(extractedJsonKey, JSON.stringify(extracted), {
       httpMetadata: { contentType: 'application/json' },
     });
+    // Terminal visibility for the extraction pipeline — the summary JSON is
+    // what gets stored to R2 alongside the uploaded file.
+    console.log(`[extract] ${extracted.source} summary JSON saved to r2://${extractedJsonKey}`);
+    console.log(JSON.stringify(extracted, null, 2));
+
+    // PPTX also gets a Markdown rendering of the same structured content.
+    if (extractedMdKey && extracted.source === 'pptx') {
+      const md = deckToMarkdown(extracted as Awaited<ReturnType<typeof extractPptxSlides>>);
+      await env.PRESENTATION_BUCKET.put(extractedMdKey, md, {
+        httpMetadata: { contentType: 'text/markdown' },
+      });
+      console.log(`[extract] pptx markdown saved to r2://${extractedMdKey}`);
+      console.log(md);
+    }
+  } else {
+    console.warn(`[extract] no slide content extracted for ${input.file.name}`);
   }
 
   await env.DB.prepare(
-    `INSERT INTO presentation_files (id, event_id, r2_key, original_name, status, slide_count, uploaded_by, uploaded_at, extracted_json_key)
-     VALUES (?, ?, ?, ?, 'ready', ?, ?, ?, ?)`,
+    `INSERT INTO presentation_files (id, event_id, r2_key, original_name, status, slide_count, uploaded_by, uploaded_at, extracted_json_key, extracted_md_key)
+     VALUES (?, ?, ?, ?, 'ready', ?, ?, ?, ?, ?)`,
   )
-    .bind(fileId, id, r2ObjectKey, input.file.name, slideCount, uploadedBy, uploadedAt, extractedJsonKey)
+    .bind(fileId, id, r2ObjectKey, input.file.name, slideCount, uploadedBy, uploadedAt, extractedJsonKey, extractedMdKey)
     .run();
 
   await env.DB.prepare(
@@ -139,13 +167,14 @@ export async function createPresentation(
     presentationFileId: fileId,
     uploadedBy,
     extractedJsonKey,
+    extractedMdKey,
   };
 }
 
 export async function getPresentation(env: Env, id: string): Promise<Presentation | null> {
   const row = await env.DB.prepare(
     `SELECT p.*, pf.status AS status, pf.id AS presentation_file_id, pf.uploaded_by AS uploaded_by,
-            pf.extracted_json_key AS extracted_json_key
+            pf.extracted_json_key AS extracted_json_key, pf.extracted_md_key AS extracted_md_key
      FROM presentations p
      LEFT JOIN presentation_files pf ON pf.event_id = p.id
      WHERE p.id = ?
@@ -245,6 +274,7 @@ export async function replacePresentation(
     uploadedAt,
     errorMessage: null,
     extractedJsonKey: null,
+    extractedMdKey: null,
   };
 }
 
@@ -311,5 +341,6 @@ export async function getPresentationStatus(env: Env, presentationId: string): P
     uploadedAt: row.uploaded_at as string,
     errorMessage: (row.error_message as string) ?? null,
     extractedJsonKey: (row.extracted_json_key as string) ?? null,
+    extractedMdKey: (row.extracted_md_key as string) ?? null,
   };
 }

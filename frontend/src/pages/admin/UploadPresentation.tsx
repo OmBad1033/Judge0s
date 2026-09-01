@@ -164,6 +164,11 @@ function PresentationGrid({ items }: { items: PresentationSummary[] }) {
           <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mb-4 truncate">
             Src: {p.originalFilename}
           </p>
+          {p.latestSession && (
+            <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mb-4 truncate">
+              Latest: {p.latestSession.sessionCode}
+            </p>
+          )}
           <div className="mt-auto flex items-center justify-between font-mono text-micro uppercase tracking-[0.18em] text-muted group-hover:text-primary transition">
             <span>View_Sessions</span>
             <span className="material-symbols-outlined text-[16px]">chevron_right</span>

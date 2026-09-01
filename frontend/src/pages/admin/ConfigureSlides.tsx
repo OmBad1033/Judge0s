@@ -50,6 +50,8 @@ export default function ConfigureSlides() {
   const [dqAll, setDqAll] = useState(true);
   const [dqSelected, setDqSelected] = useState<number[]>([]);
   const [dqBusy, setDqBusy] = useState(false);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [sessionName, setSessionName] = useState('');
 
   const loadDefaultQuestions = () => {
     if (!id) return;
@@ -113,7 +115,9 @@ export default function ConfigureSlides() {
   const createSession = async () => {
     if (!id) return;
     try {
-      const s = await api.createSession(id);
+      const s = await api.createSession(id, sessionName.trim() || undefined);
+      setShowNamePrompt(false);
+      setSessionName('');
       toast.push('success', 'Session created');
       navigate(`/admin/sessions/${s.sessionCode}`);
     } catch (e) {
@@ -189,7 +193,7 @@ export default function ConfigureSlides() {
             {presentation.slideCount} Slides &nbsp;·&nbsp; Configure content and feedback
           </p>
         </div>
-        <button onClick={createSession} className="term-button-primary min-h-[44px]">
+        <button onClick={() => setShowNamePrompt(true)} className="term-button-primary min-h-[44px]">
           <span className="material-symbols-outlined text-[18px]">sensors</span>
           Create_Session
         </button>
@@ -545,6 +549,56 @@ export default function ConfigureSlides() {
           </div>
         )}
       </section>
+
+      {showNamePrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/30 backdrop-blur-sm"
+          onClick={() => setShowNamePrompt(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="configure-session-name-title"
+        >
+          <div className="term-card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-border px-5 py-4">
+              <div className="term-label">[New_Session]</div>
+              <h2 id="configure-session-name-title" className="font-mono text-h1 text-on-surface mt-1">
+                Name this session?
+              </h2>
+            </div>
+            <form
+              className="px-5 py-5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                createSession();
+              }}
+            >
+              <label className="term-label block mb-1.5" htmlFor="configure-session-name-input">
+                Session_Name
+              </label>
+              <input
+                id="configure-session-name-input"
+                autoFocus
+                value={sessionName}
+                onChange={(e) => setSessionName(e.target.value)}
+                maxLength={120}
+                placeholder="e.g. Q3 Board Review"
+                className="w-full h-11 px-3 border border-border bg-surface font-mono text-body text-on-surface placeholder:text-muted focus:border-primary focus:outline-none"
+              />
+              <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mt-3">
+                {'>'} You can leave this blank — we&apos;ll use the session code.
+              </p>
+              <div className="flex justify-end gap-2 border-t border-border px-5 py-4 -mx-5 -mb-5 mt-5">
+                <button type="button" onClick={() => setShowNamePrompt(false)} className="term-button-secondary min-h-[44px]">
+                  Cancel
+                </button>
+                <button type="submit" className="term-button-primary min-h-[44px]">
+                  Create_Session
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -11,7 +11,10 @@ import { rateLimit } from '../services/rateLimit';
 
 const app = new Hono<{ Bindings: Env }>();
 
-const createSchema = z.object({ presentationId: z.string().min(1) });
+const createSchema = z.object({
+  presentationId: z.string().min(1),
+  name: z.string().max(120).optional(),
+});
 const slideSchema = z.object({ slideNumber: z.number().int().min(1) });
 const joinSchema = z.object({
   name: z.string().min(1),
@@ -42,7 +45,9 @@ app.post('/', adminGuard, async (c) => {
   if (!parsed.success) {
     return c.json({ error: 'VALIDATION_ERROR', issues: parsed.error.issues }, 400);
   }
-  const result = await sessionService.createSession(c.env, parsed.data.presentationId);
+  const result = await sessionService.createSession(c.env, parsed.data.presentationId, {
+    name: parsed.data.name,
+  });
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.session, 201);
 });
