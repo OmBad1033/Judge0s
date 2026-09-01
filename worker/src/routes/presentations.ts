@@ -34,21 +34,11 @@ app.post('/', adminGuard, async (c) => {
   if (!/\.(pptx|pdf)$/i.test(file.name)) return c.json({ error: 'INVALID_FILE_TYPE' }, 400);
   if (file.size > MAX_FILE_BYTES) return c.json({ error: 'FILE_TOO_LARGE' }, 400);
 
-  const isPdf = /\.pdf$/i.test(file.name);
-  // PDF derives slide count from the page count; PPTX requires a manual count.
+  // Slide count is derived from the uploaded file (PDF page count / PPTX slide
+  // count); the optional form field is only used as a fallback override.
   let slideCount: number | undefined;
-  if (isPdf) {
-    if (slideCountRaw !== null && slideCountRaw !== '') {
-      const n = Number(slideCountRaw);
-      if (Number.isInteger(n) && n >= 1) slideCount = n;
-    }
-  } else {
-    const n = Number(slideCountRaw);
-    if (!Number.isInteger(n) || n < 1) {
-      return c.json({ error: 'INVALID_SLIDE_COUNT' }, 400);
-    }
-    slideCount = n;
-  }
+  const n = Number(slideCountRaw);
+  if (Number.isInteger(n) && n >= 1) slideCount = n;
 
   // Phase 2 — auto-create an Event for the presentation so the legacy
   // `presentationId` parameter and the new `eventId` are the same value.

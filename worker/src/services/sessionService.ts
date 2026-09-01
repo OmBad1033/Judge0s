@@ -11,6 +11,7 @@ export interface Session {
   id: string;
   presentationId: string;
   sessionCode: string;
+  name: string | null;
   status: 'draft' | 'live' | 'paused' | 'ended';
   currentSlideNumber: number | null;
   createdAt: string;
@@ -55,6 +56,7 @@ interface JoinedSession {
   id: string;
   event_id: string;
   session_code: string;
+  label: string | null;
   status: string;
   current_slide_id: string | null;
   created_by: string;
@@ -85,6 +87,7 @@ function mapSession(row: JoinedSession): SessionWithPresentation {
     id: row.id,
     presentationId: row.presentation_id,
     sessionCode: row.session_code,
+    name: row.label ?? null,
     status: toLegacyStatus(row.status),
     currentSlideNumber: null, // resolved per-call via the slideService
     createdAt: row.created_at,
@@ -335,6 +338,7 @@ async function mirrorIntoLegacy(
   startedAt: string | null,
   endedAt: string | null,
   createdAt: string,
+  label: string | null,
 ): Promise<void> {
   // Ensure a `presentations` row exists with the same id as the event so the
   // FK from `presentation_sessions.presentation_id` resolves. (The compat
@@ -347,17 +351,18 @@ async function mirrorIntoLegacy(
     .run();
 
   await env.DB.prepare(
-    `INSERT INTO presentation_sessions (id, presentation_id, session_code, status, current_slide_number, created_at, started_at, ended_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO presentation_sessions (id, presentation_id, session_code, status, current_slide_number, created_at, started_at, ended_at, label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        presentation_id = excluded.presentation_id,
        session_code    = excluded.session_code,
        status          = excluded.status,
        current_slide_number = excluded.current_slide_number,
        started_at      = excluded.started_at,
-       ended_at        = excluded.ended_at`,
+       ended_at        = excluded.ended_at,
+       label           = excluded.label`,
   )
-    .bind(id, eventId, sessionCode, toLegacyStatus(status), currentSlideNumber, createdAt, startedAt, endedAt)
+    .bind(id, eventId, sessionCode, toLegacyStatus(status), currentSlideNumber, createdAt, startedAt, endedAt, label)
     .run();
 }
 
@@ -382,24 +387,25 @@ export async function getSession(env: Env, code: string): Promise<SessionWithPre
 export async function createSession(
   env: Env,
   presentationId: string,
-  options: { createdBy?: string } = {},
+  options: { createdBy?: string; name?: string } = {},
 ): Promise<Result<SessionWithPresentation>> {
   const eventId = await eventIdFromPresentation(env, presentationId);
   if (!eventId) return err('PRESENTATION_NOT_FOUND', 404);
 
   const createdBy = options.createdBy ?? 'local-admin';
   const createdAt = now();
+  const label = options.name?.trim() ? options.name.trim() : null;
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateSessionCode();
     const id = newId();
     try {
       await env.DB.prepare(
-        `INSERT INTO sessions (id, event_id, session_code, status, created_by, created_at)
-         VALUES (?, ?, ?, 'pending', ?, ?)`,
+        `INSERT INTO sessions (id, event_id, session_code, label, status, created_by, created_at)
+         VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
       )
-        .bind(id, eventId, code, createdBy, createdAt)
+        .bind(id, eventId, code, label, createdBy, createdAt)
         .run();
-      await mirrorIntoLegacy(env, id, eventId, code, 'pending', null, null, null, createdAt);
+      await mirrorIntoLegacy(env, id, eventId, code, 'pending', null, null, null, createdAt, label);
       const loaded = await loadSessionWithResolvedSlide(env, code);
       if (!loaded) return err('NOT_FOUND', 500);
       return { ok: true, session: loaded.session };
@@ -447,6 +453,7 @@ export async function startSession(env: Env, code: string): Promise<Result<Sessi
     startedAt,
     loaded.joined.ended_at,
     loaded.joined.created_at,
+    loaded.joined.label,
   );
 
   await notifyParticipants(env, code, payload);
@@ -483,6 +490,7 @@ export async function changeSlide(
     loaded.joined.started_at,
     loaded.joined.ended_at,
     loaded.joined.created_at,
+    loaded.joined.label,
   );
 
   await notifyParticipants(env, code, payload);
@@ -513,6 +521,7 @@ export async function pauseSession(env: Env, code: string): Promise<Result<Sessi
     loaded.joined.started_at,
     loaded.joined.ended_at,
     loaded.joined.created_at,
+    loaded.joined.label,
   );
 
   await callDO(env, code, 'broadcastAll', { message: { type: 'SESSION_PAUSED', status: 'paused' } });
@@ -543,6 +552,7 @@ export async function resumeSession(env: Env, code: string): Promise<Result<Sess
     loaded.joined.started_at,
     loaded.joined.ended_at,
     loaded.joined.created_at,
+    loaded.joined.label,
   );
 
   const currentSlideNumber = loaded.session.currentSlideNumber ?? 1;
@@ -580,6 +590,7 @@ export async function endSession(env: Env, code: string): Promise<Result<Session
     loaded.joined.started_at,
     endedAt,
     loaded.joined.created_at,
+    loaded.joined.label,
   );
 
   await notifyParticipants(env, code, { type: 'SESSION_ENDED' });

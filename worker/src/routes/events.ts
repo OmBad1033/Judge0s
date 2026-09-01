@@ -97,18 +97,11 @@ app.post('/:id/presentation', requireUser, async (c) => {
   if (file === null || typeof file === 'string') return c.json({ error: 'FILE_REQUIRED' }, 400);
   if (!/\.(pptx|pdf)$/i.test(file.name)) return c.json({ error: 'INVALID_FILE_TYPE' }, 400);
 
-  const isPdf = /\.pdf$/i.test(file.name);
+  // Slide count is derived from the uploaded file (PDF page count / PPTX slide
+  // count); the optional form field is only used as a fallback override.
   let slideCount: number | undefined;
-  if (isPdf) {
-    if (slideCountRaw !== null && slideCountRaw !== '') {
-      const n = Number(slideCountRaw);
-      if (Number.isInteger(n) && n >= 1) slideCount = n;
-    }
-  } else {
-    const n = Number(slideCountRaw);
-    if (!Number.isInteger(n) || n < 1) return c.json({ error: 'INVALID_SLIDE_COUNT' }, 400);
-    slideCount = n;
-  }
+  const n = Number(slideCountRaw);
+  if (Number.isInteger(n) && n >= 1) slideCount = n;
 
   const user = c.get('user');
   const p = await presentationService.createPresentation(

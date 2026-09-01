@@ -69,6 +69,7 @@ export interface Session {
   id: string;
   presentationId: string;
   sessionCode: string;
+  name: string | null;
   status: 'draft' | 'live' | 'paused' | 'ended';
   currentSlideNumber: number | null;
   createdAt: string;

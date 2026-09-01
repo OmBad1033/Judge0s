@@ -102,8 +102,8 @@ export const api = {
   deleteDefaultQuestion: (id: string, questionId: string) =>
     json<{ ok: boolean }>(`/api/presentations/${id}/default-questions/${questionId}`, 'DELETE'),
 
-  createSession: (presentationId: string) =>
-    json<Session>('/api/sessions', 'POST', { presentationId }),
+  createSession: (presentationId: string, name?: string) =>
+    json<Session>('/api/sessions', 'POST', { presentationId, name }),
   listSessions: (presentationId: string) =>
     json<{ sessions: Session[] }>(`/api/sessions?presentationId=${encodeURIComponent(presentationId)}`, 'GET'),
   getSession: (code: string) => json<Session>(`/api/sessions/${code}`, 'GET'),

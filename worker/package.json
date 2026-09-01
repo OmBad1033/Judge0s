@@ -12,7 +12,9 @@
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.11.1",
     "hono": "^4.6.14",
+    "jszip": "^3.10.1",
     "unpdf": "^1.8.1",
     "zod": "^3.23.8"
   },
