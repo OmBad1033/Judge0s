@@ -1,0 +1,44 @@
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # manual trigger for testing
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build frontend first — the worker serves ../frontend/dist as static assets
+      - name: Build frontend
+        run: pnpm --filter frontend build
+
+      - name: Typecheck
+        run: pnpm --filter worker typecheck
+
+      # wrangler deploy doesn't apply D1 migrations automatically — run them first
+      # (idempotent, so safe on every push)
+      - name: Apply D1 migrations
+        run: pnpm --filter worker db:migrate:remote
+
+      - name: Deploy Worker
+        run: pnpm --filter worker deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
