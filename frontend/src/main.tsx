@@ -5,16 +5,19 @@ import App from './App';
 import { queryClient } from './lib/query';
 import { ToastProvider } from './lib/toast';
 import ErrorBoundary from './components/ErrorBoundary';
+import { Provider } from './components/setup/provider/provider';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
-      </QueryClientProvider>
-    </ErrorBoundary>
+    <Provider defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </Provider>
   </StrictMode>,
 );

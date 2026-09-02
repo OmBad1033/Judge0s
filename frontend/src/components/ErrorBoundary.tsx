@@ -1,4 +1,6 @@
 import { Component, type ReactNode } from 'react';
+import { Box, Button, Heading, HStack, Icon, Text, VStack } from '@chakra-ui/react';
+import { AlertTriangle, Home, RefreshCw } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -18,7 +20,6 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: { componentStack?: string }) {
-    // Log to console for now — Phase 8 will wire this to a reporting service.
     // eslint-disable-next-line no-console
     console.error('[ErrorBoundary]', error, info.componentStack);
   }
@@ -33,30 +34,51 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (fallback) return fallback(error, this.reset);
 
     return (
-      <div className="dot-grid min-h-screen text-on-surface font-body flex items-center justify-center px-4">
-        <div className="term-card max-w-md w-full p-6 flex flex-col gap-4 text-center">
-          <span className="material-symbols-outlined text-4xl text-danger mx-auto">error</span>
-          <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em]">Something_Broke</h2>
-          <p className="font-body text-body text-on-surface-variant">
-            An unexpected error occurred. You can try again, or head back to the landing page.
-          </p>
-          {error.message && (
-            <pre className="font-mono text-micro text-muted text-left bg-surface-1 border border-border p-3 overflow-x-auto">
-              {error.message}
-            </pre>
-          )}
-          <div className="flex flex-col sm:flex-row gap-2 justify-center mt-2">
-            <button onClick={this.reset} className="term-button-primary">
-              <span className="material-symbols-outlined text-[18px]">refresh</span>
-              <span>Try_Again</span>
-            </button>
-            <a href="/" className="term-button-secondary">
-              <span className="material-symbols-outlined text-[18px]">home</span>
-              <span>Landing_Page</span>
-            </a>
-          </div>
-        </div>
-      </div>
+      <Box minH="100dvh" display="grid" placeItems="center" bg="bg.canvas" color="fg" px="4">
+        <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="6" maxW="md" w="full" textAlign="center">
+          <VStack gap="4">
+            <Icon color="red.solid" boxSize="10">
+              <AlertTriangle />
+            </Icon>
+            <Heading size="lg" textTransform="uppercase" letterSpacing="tight">
+              Something Broke
+            </Heading>
+            <Text color="fg.muted" fontSize="sm">
+              An unexpected error occurred. You can try again, or head back to the landing page.
+            </Text>
+            {error.message && (
+              <Box
+                as="pre"
+                fontSize="xs"
+                fontFamily="mono"
+                color="fg.muted"
+                textAlign="left"
+                bg="bg.muted"
+                borderWidth="1px"
+                borderColor="border.subtle"
+                borderRadius="md"
+                p="3"
+                overflowX="auto"
+                w="full"
+              >
+                {error.message}
+              </Box>
+            )}
+            <HStack gap="3" justify="center" mt="2" flexWrap="wrap">
+              <Button colorPalette="green" onClick={this.reset}>
+                <RefreshCw size={16} />
+                Try Again
+              </Button>
+              <a href="/">
+                <Button variant="outline">
+                  <Home size={16} />
+                  Landing Page
+                </Button>
+              </a>
+            </HStack>
+          </VStack>
+        </Box>
+      </Box>
     );
   }
 }

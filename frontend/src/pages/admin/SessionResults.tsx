@@ -1,13 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import {
+  Box,
+  Button,
+  Flex,
+  HStack,
+  Icon,
+  Input,
+  SimpleGrid,
+  Table,
+  Tag,
+  Text,
+  VStack,
+} from '@chakra-ui/react';
+import { ArrowLeft, BarChart3, Download, Inbox, Search, Sparkles } from 'lucide-react';
 import { api } from '../../api';
 import type { ExportData } from '../../types';
-import {
-  totalEvaluations,
-  totalNodesProcessed,
-  payloadScore,
-  aiCompliance,
-} from '../../lib/metrics';
+import { totalEvaluations, totalNodesProcessed, payloadScore, aiCompliance } from '../../lib/metrics';
+import { PageHeader } from '../../components/ui/page-header';
+import { StatCard } from '../../components/ui/stat-card';
+import { EmptyStateCard } from '../../components/ui/empty-state';
 
 function toCSV(data: ExportData): string {
   const headers = ['Slide', 'Name', 'Email', 'Question', 'Type', 'Response', 'Submitted'];
@@ -72,9 +84,9 @@ export default function SessionResults() {
 
   if (!data) {
     return (
-      <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted p-10 text-center">
-        {'>'} Loading_Export
-      </div>
+      <Box textAlign="center" py="10" color="fg.muted" fontSize="sm">
+        Loading export…
+      </Box>
     );
   }
 
@@ -84,236 +96,214 @@ export default function SessionResults() {
   const nodes = totalNodesProcessed(data);
 
   return (
-    <>
-      {/* Page header */}
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4 mb-6">
-        <div>
-          <div className="term-label">[Results]</div>
-          <h1 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mt-1">
-            Results &amp; Export
-          </h1>
-          <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-            {data.session.presentation} &nbsp;·&nbsp; Code: {data.session.code} &nbsp;·&nbsp; {data.session.status}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={downloadCSV} className="term-button-secondary">
-            <span className="material-symbols-outlined text-[16px]">download</span>
-            Export_Csv
-          </button>
-          <Link to={`/admin/sessions/${code}/analytics`} className="term-button-primary">
-            <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
-            Analysis
-          </Link>
-          <Link to={`/admin/sessions/${code}`} className="term-button-secondary">
-            <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-            Back
-          </Link>
-        </div>
-      </div>
+    <VStack gap="6" align="stretch">
+      <PageHeader
+        eyebrow="Results"
+        title="Results & Export"
+        description={`${data.session.presentation} · Code: ${data.session.code} · ${data.session.status}`}
+        actions={
+          <>
+            <Button variant="outline" onClick={downloadCSV}>
+              <Download size={16} />
+              Export CSV
+            </Button>
+            <Link to={`/admin/sessions/${code}/analytics`}>
+              <Button colorPalette="green">
+                <Sparkles size={16} />
+                Analysis
+              </Button>
+            </Link>
+            <Link to={`/admin/sessions/${code}`}>
+              <Button variant="outline">
+                <ArrowLeft size={16} />
+                Back
+              </Button>
+            </Link>
+          </>
+        }
+      />
 
       {/* KPI scorecards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border border border-border mb-6">
-        {[
-          {
-            label: 'Total_Evaluations',
-            value: totalEvals.toLocaleString(),
-            unit: '/ 100',
-            color: 'text-on-surface',
-          },
-          {
-            label: 'Payload_Score',
-            value: payload.toFixed(1),
-            unit: '/ 100',
-            color: 'text-primary',
-          },
-          {
-            label: 'Ai_Compliance',
-            value: ai.toFixed(1),
-            unit: '%',
-            color: 'text-on-surface',
-          },
-          {
-            label: 'Total_Nodes',
-            value: nodes.toLocaleString(),
-            unit: 'processed',
-            color: 'text-on-surface',
-          },
-        ].map((k) => (
-          <div key={k.label} className="bg-surface p-4">
-            <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted">[{k.label}]</div>
-            <div className={`font-mono text-display-sm mt-2 ${k.color}`}>{k.value}</div>
-            <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">{k.unit}</div>
-          </div>
-        ))}
-      </div>
+      <SimpleGrid columns={{ base: 2, lg: 4 }} gap="4">
+        <StatCard label="Total Evaluations" value={totalEvals.toLocaleString()} sub="/ 100" />
+        <StatCard label="Payload Score" value={payload.toFixed(1)} sub="/ 100" icon={<BarChart3 size={16} />} />
+        <StatCard label="AI Compliance" value={`${ai.toFixed(1)}%`} icon={<Sparkles size={16} />} />
+        <StatCard label="Total Nodes" value={nodes.toLocaleString()} sub="processed" icon={<Inbox size={16} />} />
+      </SimpleGrid>
 
-      {/* Filter + search row */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <button
+      {/* Filter + search */}
+      <Flex gap="2" flexWrap="wrap" align="center">
+        <Button
+          size="sm"
+          variant={filter === 'all' ? 'solid' : 'outline'}
+          colorPalette={filter === 'all' ? 'green' : undefined}
           onClick={() => setFilter('all')}
-          className={`font-mono text-micro uppercase tracking-[0.15em] px-3 py-1.5 border ${
-            filter === 'all' ? 'border-primary bg-primary text-on-primary' : 'border-border bg-surface text-muted hover:text-on-surface'
-          }`}
         >
-          [Filter: All]
-        </button>
-        <button
+          All
+        </Button>
+        <Button
+          size="sm"
+          variant={filter === 'complete' ? 'solid' : 'outline'}
+          colorPalette={filter === 'complete' ? 'green' : undefined}
           onClick={() => setFilter('complete')}
-          className={`font-mono text-micro uppercase tracking-[0.15em] px-3 py-1.5 border ${
-            filter === 'complete' ? 'border-primary bg-primary text-on-primary' : 'border-border bg-surface text-muted hover:text-on-surface'
-          }`}
         >
-          [Filter: Complete]
-        </button>
-        <div className="flex-1" />
-        <div className="relative">
-          <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-muted text-[18px]">search</span>
-          <input
+          Complete
+        </Button>
+        <Box flex="1" />
+        <Box position="relative" w={{ base: 'full', sm: 'auto' }}>
+          <Box position="absolute" left="2.5" top="1/2" transform="translateY(-50%)" color="fg.muted" pointerEvents="none">
+            <Search size={16} />
+          </Box>
+          <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="term-input pl-8 pr-3 py-1.5 text-body"
-            placeholder="Search_Id_Or_Participant"
+            placeholder="Search participant or response…"
+            pl="9"
+            w={{ base: 'full', sm: '64' }}
+            size="sm"
           />
-        </div>
-      </div>
+        </Box>
+      </Flex>
 
       {data.feedback.length === 0 ? (
-        <div className="term-card text-center py-10">
-          <span className="material-symbols-outlined text-4xl text-muted">inbox</span>
-          <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mt-3">
-            No_Feedback_Collected
-          </h2>
-          <p className="font-body text-body text-on-surface-variant mt-1">
-            Responses will appear here once participants submit.
-          </p>
-        </div>
+        <EmptyStateCard
+          icon={<Icon color="fg.muted" boxSize="10"><Inbox /></Icon>}
+          title="No feedback collected"
+          description="Responses will appear here once participants submit."
+        />
       ) : (
         <>
           {/* Desktop table */}
-          <div className="hidden md:block term-card overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-surface-1 text-left font-mono text-micro uppercase tracking-[0.18em] text-muted">
+          <Box display={{ base: 'none', md: 'block' }} borderWidth="1px" borderColor="border.subtle" borderRadius="lg" overflow="hidden" bg="bg.surface">
+            <Table.Root size="sm">
+              <Table.Header>
+                <Table.Row>
                   {['Slide', 'Name', 'Email', 'Question', 'Type', 'Response', 'Submitted'].map((h) => (
-                    <th key={h} className="px-3 py-2 border-b border-border">{h}</th>
+                    <Table.ColumnHeader key={h}>{h}</Table.ColumnHeader>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
                 {filtered.map((f, i) => (
-                  <tr key={i} className="term-table-row">
-                    <td className="px-3 py-2 font-mono text-body text-on-surface">{f.slideNumber}</td>
-                    <td className="px-3 py-2 font-mono text-body text-on-surface">{f.user.name}</td>
-                    <td className="px-3 py-2 font-mono text-body text-on-surface-variant">{f.user.email}</td>
-                    <td className="px-3 py-2 font-mono text-body text-on-surface-variant">{f.question ?? '—'}</td>
-                    <td className="px-3 py-2">
-                      <span className="font-mono text-micro uppercase tracking-[0.15em] border border-primary text-primary px-1.5 py-0.5">
+                  <Table.Row key={i}>
+                    <Table.Cell fontFamily="mono">{f.slideNumber}</Table.Cell>
+                    <Table.Cell fontWeight="medium">{f.user.name}</Table.Cell>
+                    <Table.Cell color="fg.muted">{f.user.email}</Table.Cell>
+                    <Table.Cell color="fg.muted">{f.question ?? '—'}</Table.Cell>
+                    <Table.Cell>
+                      <Tag.Root colorPalette="green" variant="surface" size="sm" textTransform="uppercase" fontSize="xs">
                         {f.feedbackType}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 font-mono text-body text-on-surface">{f.response ?? '—'}</td>
-                    <td className="px-3 py-2 font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                      </Tag.Root>
+                    </Table.Cell>
+                    <Table.Cell>{f.response ?? '—'}</Table.Cell>
+                    <Table.Cell color="fg.muted" fontFamily="mono" fontSize="xs">
                       {new Date(f.submittedAt).toISOString().slice(0, 19).replace('T', ' ')}Z
-                    </td>
-                  </tr>
+                    </Table.Cell>
+                  </Table.Row>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </Table.Body>
+            </Table.Root>
+          </Box>
+
           {/* Mobile cards */}
-          <div className="md:hidden flex flex-col gap-px bg-border border border-border">
+          <VStack display={{ base: 'flex', md: 'none' }} gap="2" align="stretch">
             {filtered.map((f, i) => (
-              <div key={i} className="bg-surface p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+              <Box key={i} borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="4">
+                <Flex justify="space-between" align="center" mb="2">
+                  <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
                     Slide {f.slideNumber}
-                  </span>
-                  <span className="font-mono text-micro uppercase tracking-[0.15em] border border-primary text-primary px-1.5 py-0.5">
+                  </Text>
+                  <Tag.Root colorPalette="green" variant="surface" size="sm" textTransform="uppercase" fontSize="xs">
                     {f.feedbackType}
-                  </span>
-                </div>
-                <p className="font-mono text-body text-on-surface mb-1">
-                  {f.user.name} &nbsp;·&nbsp; {f.user.email}
-                </p>
+                  </Tag.Root>
+                </Flex>
+                <Text fontWeight="medium" mb="1">
+                  {f.user.name} · {f.user.email}
+                </Text>
                 {f.question && (
-                  <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mb-1">{f.question}</p>
+                  <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mb="1">
+                    {f.question}
+                  </Text>
                 )}
-                <p className="font-mono text-body text-on-surface">{f.response ?? '—'}</p>
-              </div>
+                <Text>{f.response ?? '—'}</Text>
+              </Box>
             ))}
-          </div>
+          </VStack>
         </>
       )}
 
       {/* Default-question responses */}
       {data.defaultQuestions.length > 0 && (
-        <section className="mt-6">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="material-symbols-outlined text-primary">stars</span>
-            <h2 className="font-mono text-h1 uppercase tracking-[-0.01em] text-on-surface">
-              Default_Responses
-            </h2>
-          </div>
+        <Box>
+          <HStack gap="2" mb="3">
+            <Sparkles size={18} color="var(--chakra-colors-green-solid)" />
+            <Text fontWeight="bold" textTransform="uppercase" letterSpacing="wide">
+              Default Responses
+            </Text>
+          </HStack>
 
           {data.defaultFeedback.length === 0 ? (
-            <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-              {'>'} No default-question responses collected.
-            </p>
+            <Text color="fg.muted" fontSize="sm">
+              No default-question responses collected.
+            </Text>
           ) : (
-            <div className="hidden md:block term-card overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-surface-1 text-left font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                    {['Slide', 'Name', 'Email', 'Question', 'Type', 'Response', 'Submitted'].map((h) => (
-                      <th key={h} className="px-3 py-2 border-b border-border">{h}</th>
+            <>
+              <Box display={{ base: 'none', md: 'block' }} borderWidth="1px" borderColor="border.subtle" borderRadius="lg" overflow="hidden" bg="bg.surface">
+                <Table.Root size="sm">
+                  <Table.Header>
+                    <Table.Row>
+                      {['Slide', 'Name', 'Email', 'Question', 'Type', 'Response', 'Submitted'].map((h) => (
+                        <Table.ColumnHeader key={h}>{h}</Table.ColumnHeader>
+                      ))}
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {data.defaultFeedback.map((f, i) => (
+                      <Table.Row key={i}>
+                        <Table.Cell fontFamily="mono">{f.slideNumber}</Table.Cell>
+                        <Table.Cell fontWeight="medium">{f.user.name}</Table.Cell>
+                        <Table.Cell color="fg.muted">{f.user.email}</Table.Cell>
+                        <Table.Cell color="fg.muted">{f.question}</Table.Cell>
+                        <Table.Cell>
+                          <Tag.Root colorPalette="green" variant="surface" size="sm" textTransform="uppercase" fontSize="xs">
+                            {f.questionType}
+                          </Tag.Root>
+                        </Table.Cell>
+                        <Table.Cell textTransform="capitalize">{f.response ?? '—'}</Table.Cell>
+                        <Table.Cell color="fg.muted" fontFamily="mono" fontSize="xs">
+                          {new Date(f.submittedAt).toISOString().slice(0, 19).replace('T', ' ')}Z
+                        </Table.Cell>
+                      </Table.Row>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.defaultFeedback.map((f, i) => (
-                    <tr key={i} className="term-table-row">
-                      <td className="px-3 py-2 font-mono text-body text-on-surface">{f.slideNumber}</td>
-                      <td className="px-3 py-2 font-mono text-body text-on-surface">{f.user.name}</td>
-                      <td className="px-3 py-2 font-mono text-body text-on-surface-variant">{f.user.email}</td>
-                      <td className="px-3 py-2 font-mono text-body text-on-surface-variant">{f.question}</td>
-                      <td className="px-3 py-2">
-                        <span className="font-mono text-micro uppercase tracking-[0.15em] border border-primary text-primary px-1.5 py-0.5">
-                          {f.questionType}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 font-mono text-body text-on-surface capitalize">{f.response ?? '—'}</td>
-                      <td className="px-3 py-2 font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                        {new Date(f.submittedAt).toISOString().slice(0, 19).replace('T', ' ')}Z
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </Table.Body>
+                </Table.Root>
+              </Box>
 
-          <div className="md:hidden flex flex-col gap-px bg-border border border-border mt-3">
-            {data.defaultFeedback.map((f, i) => (
-              <div key={i} className="bg-surface p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                    Slide {f.slideNumber}
-                  </span>
-                  <span className="font-mono text-micro uppercase tracking-[0.15em] border border-primary text-primary px-1.5 py-0.5">
-                    {f.questionType}
-                  </span>
-                </div>
-                <p className="font-mono text-body text-on-surface mb-1">
-                  {f.user.name} &nbsp;·&nbsp; {f.user.email}
-                </p>
-                <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mb-1">{f.question}</p>
-                <p className="font-mono text-body text-on-surface capitalize">{f.response ?? '—'}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+              <VStack display={{ base: 'flex', md: 'none' }} gap="2" align="stretch" mt="3">
+                {data.defaultFeedback.map((f, i) => (
+                  <Box key={i} borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="4">
+                    <Flex justify="space-between" align="center" mb="2">
+                      <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                        Slide {f.slideNumber}
+                      </Text>
+                      <Tag.Root colorPalette="green" variant="surface" size="sm" textTransform="uppercase" fontSize="xs">
+                        {f.questionType}
+                      </Tag.Root>
+                    </Flex>
+                    <Text fontWeight="medium" mb="1">
+                      {f.user.name} · {f.user.email}
+                    </Text>
+                    <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mb="1">
+                      {f.question}
+                    </Text>
+                    <Text textTransform="capitalize">{f.response ?? '—'}</Text>
+                  </Box>
+                ))}
+              </VStack>
+            </>
+          )}
+        </Box>
       )}
-    </>
+    </VStack>
   );
 }

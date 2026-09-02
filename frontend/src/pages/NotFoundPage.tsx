@@ -1,24 +1,47 @@
+import { Link } from 'react-router-dom';
+import { Box, Button, Heading, HStack, Icon, Text, VStack } from '@chakra-ui/react';
+import { CloudOff, Home, ScanLine } from 'lucide-react';
+
 export default function NotFoundPage() {
   return (
-    <div className="dot-grid min-h-screen text-on-surface font-body flex items-center justify-center px-4">
-      <div className="term-card max-w-md w-full p-6 flex flex-col gap-4 text-center">
-        <span className="material-symbols-outlined text-5xl text-muted mx-auto">cloud_off</span>
-        <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em]">404_Not_Found</h2>
-        <p className="font-body text-body text-on-surface-variant">
-          The page you tried to reach doesn't exist. If you scanned a code, double-check it — or jump
-          straight to the join screen.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-2 justify-center mt-2">
-          <a href="/join" className="term-button-primary">
-            <span className="material-symbols-outlined text-[18px]">qr_code_scanner</span>
-            <span>Join_Session</span>
-          </a>
-          <a href="/" className="term-button-secondary">
-            <span className="material-symbols-outlined text-[18px]">home</span>
-            <span>Landing_Page</span>
-          </a>
-        </div>
-      </div>
-    </div>
+    <Box minH="100dvh" display="grid" placeItems="center" bg="bg.canvas" color="fg" px="4">
+      <Box
+        borderWidth="1px"
+        borderColor="border.subtle"
+        borderRadius="lg"
+        bg="bg.surface"
+        p="8"
+        maxW="md"
+        w="full"
+        textAlign="center"
+      >
+        <VStack gap="4">
+          <Icon color="fg.muted" boxSize="10">
+            <CloudOff />
+          </Icon>
+          <Heading size="lg" textTransform="uppercase" letterSpacing="tight">
+            404 — Not Found
+          </Heading>
+          <Text color="fg.muted" fontSize="sm">
+            The page you tried to reach doesn&apos;t exist. If you scanned a code, double-check it — or
+            jump straight to the join screen.
+          </Text>
+          <HStack gap="3" justify="center" mt="2" flexWrap="wrap">
+            <Link to="/join">
+              <Button colorPalette="green">
+                <ScanLine size={16} />
+                Join Session
+              </Button>
+            </Link>
+            <Link to="/">
+              <Button variant="outline">
+                <Home size={16} />
+                Landing Page
+              </Button>
+            </Link>
+          </HStack>
+        </VStack>
+      </Box>
+    </Box>
   );
 }

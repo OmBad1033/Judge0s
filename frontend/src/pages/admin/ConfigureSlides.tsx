@@ -9,16 +9,46 @@ import type {
   DefaultQuestionType,
 } from '../../types';
 import { useToast } from '../../lib/toast';
-import Skeleton from '../../components/Skeleton';
+import {
+  Alert,
+  Box,
+  Button,
+  Checkbox,
+  Dialog,
+  DialogBody,
+  DialogCloseTrigger,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Field,
+  FieldLabel,
+  Flex,
+  Grid,
+  Heading,
+  HStack,
+  Icon,
+  Input,
+  RadioGroup,
+  Separator,
+  SimpleGrid,
+  Tag,
+  Text,
+  Textarea,
+  VStack,
+} from '@chakra-ui/react';
+import { Check, CheckCircle2, FilePen, Plus, Radar, Save, Star, Trash2 } from 'lucide-react';
+import { PageHeader } from '../../components/ui/page-header';
+import { SkeletonRows } from '../../components/ui/skeleton';
 import ConnectionStatus from '../../components/ConnectionStatus';
 import FeedbackForm from '../../components/FeedbackForm';
 import DefaultQuestionForm from '../../components/DefaultQuestionForm';
 
-const TYPES: { value: FeedbackType; label: string; icon: string }[] = [
-  { value: 'disabled', label: 'None', icon: 'block' },
-  { value: 'boolean', label: 'Yes / No', icon: 'toggle_on' },
-  { value: 'multiple_choice', label: 'Choice', icon: 'checklist' },
-  { value: 'open_text', label: 'Text', icon: 'chat' },
+const TYPES: { value: FeedbackType; label: string; icon: React.ReactNode }[] = [
+  { value: 'disabled', label: 'None', icon: <BlockIcon /> },
+  { value: 'boolean', label: 'Yes / No', icon: <ToggleIcon /> },
+  { value: 'multiple_choice', label: 'Choice', icon: <ChecklistIcon /> },
+  { value: 'open_text', label: 'Text', icon: <ChatIcon /> },
 ];
 
 interface Draft {
@@ -34,11 +64,6 @@ interface Draft {
   dirty: boolean;
 }
 
-// Desktop-first slide configuration. Three-pane layout:
-//   1. Slide list (left)
-//   2. Editor (middle)
-//   3. Mobile-width live preview (right) — literally a phone-shaped viewport
-//      so the admin sees exactly what the participant will see.
 export default function ConfigureSlides() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -164,12 +189,7 @@ export default function ConfigureSlides() {
     setDqSelected((s) => (s.includes(n) ? s.filter((x) => x !== n) : [...s, n].sort((a, b) => a - b)));
 
   if (!presentation) {
-    return (
-      <div className="space-y-4">
-        <Skeleton variant="card" />
-        <Skeleton variant="card" rows={4} />
-      </div>
-    );
+    return <SkeletonRows rows={4} />;
   }
 
   const d = drafts[active];
@@ -186,473 +206,507 @@ export default function ConfigureSlides() {
   const previewDefaultQuestions = defaultQuestions.filter((q) => q.targetSlides.includes(active + 1));
 
   return (
-    <>
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4 mb-4">
-        <div>
-          <div className="term-label">[Slide_Config]</div>
-          <h1 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mt-1">
-            {presentation.title}
-          </h1>
-          <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-            {presentation.slideCount} Slides &nbsp;·&nbsp; Configure content and feedback
-          </p>
-        </div>
-        <button onClick={() => setShowNamePrompt(true)} className="term-button-primary min-h-[44px]">
-          <span className="material-symbols-outlined text-[18px]">sensors</span>
-          Create_Session
-        </button>
-      </div>
+    <VStack gap="4" align="stretch">
+      <PageHeader
+        eyebrow="Slide Configuration"
+        title={presentation.title}
+        description={`${presentation.slideCount} Slides · Configure content and feedback`}
+        actions={
+          <Button colorPalette="green" onClick={() => setShowNamePrompt(true)}>
+            <Radar size={16} />
+            Create Session
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <Grid templateColumns={{ base: '1fr', lg: '3fr 5fr 4fr' }} gap="4" alignItems="start">
         {/* LEFT — slide list */}
-        <aside className="lg:col-span-3 term-card p-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-          <div className="term-label mb-2 px-1">[Slides]</div>
-          <div className="flex lg:flex-col gap-2 lg:gap-px lg:bg-border overflow-x-auto lg:overflow-visible">
+        <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="3" position={{ lg: 'sticky' }} top={{ lg: '16' }}>
+          <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mb="2" px="1">
+            Slides
+          </Text>
+          <VStack gap="1" align="stretch">
             {drafts.map((dr, i) => {
               const isActive = active === i;
               return (
-                <button
+                <Button
                   key={i}
                   onClick={() => setActive(i)}
-                  className={`shrink-0 lg:w-full text-left flex items-center gap-2 lg:gap-3 p-2.5 border transition min-h-[44px] ${
-                    isActive
-                      ? 'border-primary bg-primary-dim/30'
-                      : 'border-border lg:border-transparent bg-surface hover:border-primary'
-                  }`}
+                  variant={isActive ? 'surface' : 'ghost'}
+                  colorPalette={isActive ? 'green' : undefined}
+                  justifyContent="flex-start"
+                  h="10"
+                  px="2"
+                  gap="2.5"
+                  borderRadius="md"
+                  _active={{ bg: undefined }}
                 >
-                  <span
-                    className={`w-7 h-7 inline-flex items-center justify-center font-mono text-micro uppercase tracking-[0.15em] ${
-                      isActive ? 'bg-primary text-on-primary' : 'bg-surface-1 text-muted border border-border'
-                    }`}
+                  <Box
+                    w="6"
+                    h="6"
+                    borderRadius="sm"
+                    display="grid"
+                    placeItems="center"
+                    fontSize="xs"
+                    fontFamily="mono"
+                    bg={isActive ? 'green.solid' : 'bg.muted'}
+                    color={isActive ? 'green.fg' : 'fg.muted'}
+                    flexShrink="0"
                   >
                     {isActive ? '>' : String(i + 1).padStart(2, '0')}
-                  </span>
-                  <span className="font-mono text-body text-on-surface truncate flex-1 hidden lg:block">
-                    {dr.title || `Untitled_${String(i + 1).padStart(2, '0')}`}
-                  </span>
+                  </Box>
+                  <Text fontSize="sm" truncate flex="1" textAlign="left">
+                    {dr.title || `Untitled ${String(i + 1).padStart(2, '0')}`}
+                  </Text>
                   {dr.dirty ? (
-                    <span
-                      className="material-symbols-outlined text-[16px] text-warning hidden lg:inline-block"
-                      title="Unsaved"
-                    >
-                      edit_note
-                    </span>
+                    <FilePen size={14} color="var(--chakra-colors-orange-solid)" />
                   ) : dr.saved ? (
-                    <span
-                      className="material-symbols-outlined text-[16px] text-primary hidden lg:inline-block"
-                      title="Saved"
-                    >
-                      check_circle
-                    </span>
+                    <CheckCircle2 size={14} color="var(--chakra-colors-green-solid)" />
                   ) : null}
-                </button>
+                </Button>
               );
             })}
-          </div>
-        </aside>
+          </VStack>
+        </Box>
 
         {/* MIDDLE — editor */}
-        <section className="lg:col-span-5 term-card p-5">
-          <div className="flex items-center gap-2 mb-4 border-b border-border pb-3">
-            <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">[Slide]</span>
-            <h2 className="font-mono text-h1 text-on-surface">{String(active + 1).padStart(2, '0')}</h2>
-            <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+        <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="5">
+          <HStack gap="2" mb="4" pb="3" borderBottomWidth="1px" borderColor="border.subtle">
+            <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+              Slide
+            </Text>
+            <Heading size="md" fontFamily="mono">
+              {String(active + 1).padStart(2, '0')}
+            </Heading>
+            <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
               / {String(presentation.slideCount).padStart(2, '0')}
-            </span>
-          </div>
-          <div className="flex flex-col gap-4">
-            <div>
-              <label className="term-label block mb-1.5" htmlFor="slide-title">
-                [Title] (Optional)
-              </label>
-              <input
-                id="slide-title"
-                className="term-input px-3 py-2"
+            </Text>
+          </HStack>
+
+          <VStack gap="4" align="stretch">
+            <Field.Root>
+              <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                Title (Optional)
+              </FieldLabel>
+              <Input
                 value={d.title}
                 onChange={(e) => update(active, { title: e.target.value })}
                 placeholder="Slide title"
+                size="lg"
               />
-            </div>
-            <div>
-              <label className="term-label block mb-1.5" htmlFor="slide-summary">
-                [Summary]
-              </label>
-              <textarea
-                id="slide-summary"
-                className="term-input px-3 py-2 min-h-[80px] resize-none"
+            </Field.Root>
+
+            <Field.Root>
+              <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                Summary
+              </FieldLabel>
+              <Textarea
                 value={d.summary}
                 onChange={(e) => update(active, { summary: e.target.value })}
                 placeholder="What participants see for this slide"
+                minH="80px"
+                resize="none"
+                size="lg"
               />
-            </div>
-            <div>
-              <label className="term-label block mb-2">[Input_Modality]</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border border border-border">
+            </Field.Root>
+
+            <Box>
+              <Text fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted" mb="2">
+                Input Modality
+              </Text>
+              <SimpleGrid columns={{ base: 2, sm: 4 }} gap="2">
                 {TYPES.map((t) => {
                   const selected = d.type === t.value;
                   return (
-                    <button
+                    <Button
                       key={t.value}
-                      type="button"
                       onClick={() => update(active, { type: t.value, enabled: t.value !== 'disabled' })}
-                      className={`flex flex-col items-center gap-1 p-3 font-mono text-micro uppercase tracking-[0.15em] transition min-h-[60px] ${
-                        selected
-                          ? 'bg-primary text-on-primary'
-                          : 'bg-surface text-muted hover:bg-surface-1 hover:text-on-surface'
-                      }`}
+                      variant={selected ? 'solid' : 'outline'}
+                      colorPalette={selected ? 'green' : undefined}
+                      flexDirection="column"
+                      gap="1"
+                      h="56px"
+                      textTransform="uppercase"
+                      letterSpacing="wide"
+                      fontSize="xs"
                     >
-                      <span className="material-symbols-outlined text-[18px]">{t.icon}</span>
+                      <Icon boxSize="4">{t.icon}</Icon>
                       {t.label}
-                    </button>
+                    </Button>
                   );
                 })}
-              </div>
-            </div>
+              </SimpleGrid>
+            </Box>
+
             {d.type !== 'disabled' && (
               <>
-                <div>
-                  <label className="term-label block mb-1.5" htmlFor="slide-question">
-                    [Prompt_Text]
-                  </label>
-                  <input
-                    id="slide-question"
-                    className="term-input px-3 py-2"
+                <Field.Root>
+                  <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                    Prompt Text
+                  </FieldLabel>
+                  <Input
                     value={d.question}
                     onChange={(e) => update(active, { question: e.target.value })}
                     placeholder="Ask participants something"
+                    size="lg"
                   />
-                </div>
+                </Field.Root>
+
                 {d.type === 'multiple_choice' && (
-                  <div>
-                    <label className="term-label block mb-1.5" htmlFor="slide-options">
-                      [Scoring_Vectors]
-                    </label>
-                    <textarea
-                      id="slide-options"
-                      className="term-input px-3 py-2 min-h-[100px] resize-none"
+                  <Field.Root>
+                    <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                      Options
+                    </FieldLabel>
+                    <Textarea
                       value={d.options.join('\n')}
                       onChange={(e) => update(active, { options: e.target.value.split('\n') })}
                       placeholder={'Highly Accurate\nPartially Accurate\nInaccurate'}
+                      minH="100px"
+                      resize="none"
+                      size="lg"
                     />
-                  </div>
+                  </Field.Root>
                 )}
-                <div className="flex flex-wrap gap-6 font-mono text-micro uppercase tracking-[0.18em] text-on-surface-variant">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 accent-primary"
-                      checked={d.required}
-                      onChange={(e) => update(active, { required: e.target.checked })}
-                    />
-                    Required
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 accent-primary"
-                      checked={d.allowResubmission}
-                      onChange={(e) => update(active, { allowResubmission: e.target.checked })}
-                    />
-                    Allow_Resubmission
-                  </label>
-                </div>
+
+                <HStack gap="6">
+                  <Checkbox.Root
+                    checked={d.required}
+                    onCheckedChange={(e) => update(active, { required: !!e.checked })}
+                  >
+                    <Checkbox.HiddenInput />
+                    <Checkbox.Control />
+                    <Checkbox.Label fontSize="sm">Required</Checkbox.Label>
+                  </Checkbox.Root>
+                  <Checkbox.Root
+                    checked={d.allowResubmission}
+                    onCheckedChange={(e) => update(active, { allowResubmission: !!e.checked })}
+                  >
+                    <Checkbox.HiddenInput />
+                    <Checkbox.Control />
+                    <Checkbox.Label fontSize="sm">Allow Resubmission</Checkbox.Label>
+                  </Checkbox.Root>
+                </HStack>
               </>
             )}
-            <div className="flex items-center gap-3 pt-2 border-t border-border mt-2">
-              <button onClick={() => save(active)} className="term-button-primary min-h-[44px]">
-                <span className="material-symbols-outlined text-[18px]">save</span>
-                Save_Slide
-              </button>
+
+            <HStack gap="3" pt="3" mt="2" borderTopWidth="1px" borderColor="border.subtle">
+              <Button colorPalette="green" onClick={() => save(active)}>
+                <Save size={16} />
+                Save Slide
+              </Button>
               {d.dirty ? (
-                <span className="font-mono text-micro uppercase tracking-[0.18em] text-warning">
-                  {'>'} Unsaved_Changes
-                </span>
+                <HStack gap="1.5" color="orange.solid" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                  <FilePen size={14} />
+                  Unsaved Changes
+                </HStack>
               ) : d.saved ? (
-                <span className="font-mono text-micro uppercase tracking-[0.18em] text-primary inline-flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px]">check</span>
+                <HStack gap="1.5" color="green.solid" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                  <Check size={14} />
                   Saved
-                </span>
+                </HStack>
               ) : null}
-            </div>
-          </div>
-        </section>
+            </HStack>
+          </VStack>
+        </Box>
 
-        {/* RIGHT — phone-shaped live preview. Mirrors the participant's real
-            phone view (ViewSession): max-w-md column, same spacing/type scale,
-            bottom-anchored submit bar. */}
-        <aside className="lg:col-span-4">
-          <div className="term-label mb-2 px-1">[Preview_Hud — Mobile]</div>
-          <div className="bg-surface-2 border border-border p-6 flex justify-center">
-            <div
-              className="bg-surface border border-border w-[320px] max-w-full shadow-hairline"
-              style={{ borderRadius: '24px' }}
+        {/* RIGHT — phone-shaped live preview */}
+        <Box>
+          <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mb="2" px="1">
+            Preview — Mobile
+          </Text>
+          <Box bg="bg.muted" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" p="6" display="flex" justifyContent="center">
+            <Box
+              w="320px"
+              maxW="full"
+              borderRadius="24px"
+              borderWidth="1px"
+              borderColor="border.emphasized"
+              bg="bg.surface"
+              overflow="hidden"
+              boxShadow="lg"
             >
-              {/* Phone "notch" decoration */}
-              <div className="flex justify-center pt-2">
-                <span className="block w-16 h-1 bg-border-strong" style={{ borderRadius: '2px' }} />
-              </div>
+              {/* Notch */}
+              <Flex justify="center" pt="2">
+                <Box w="16" h="1" bg="border.emphasized" borderRadius="full" />
+              </Flex>
 
-              {/* Inner screen: replicate ViewSession's scrollable column exactly. */}
-              <div className="relative overflow-hidden" style={{ borderRadius: '24px' }}>
-                <div className="max-h-[560px] overflow-y-auto">
-                  <main className="flex flex-col px-4 pt-4 pb-32 gap-4">
-                    {/* Top status strip */}
-                    <header className="flex items-center justify-between border border-border bg-surface px-3 py-2">
-                      <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                        [Session_Id: ----]
-                      </span>
-                      <ConnectionStatus state="connected" />
-                    </header>
+              <Box maxH="560px" overflowY="auto" p="4" display="flex" flexDirection="column" gap="4" pb="20">
+                <Flex align="center" justify="space-between" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" px="3" py="2">
+                  <Text color="fg.muted" fontSize="xs" fontFamily="mono" textTransform="uppercase" letterSpacing="wider">
+                    Session: ---- 
+                  </Text>
+                  <ConnectionStatus state="connected" />
+                </Flex>
 
-                    {/* Slide badge */}
-                    <div className="border border-border bg-surface px-3 py-2 flex items-center justify-between">
-                      <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                        [Active_Slide]
-                      </span>
-                      <span className="font-mono text-h1 text-on-surface">
-                        {String(active + 1).padStart(2, '0')}
-                      </span>
-                    </div>
+                <Flex align="center" justify="space-between" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" px="3" py="2">
+                  <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                    Active Slide
+                  </Text>
+                  <Text fontFamily="mono" fontSize="2xl" fontWeight="bold">
+                    {String(active + 1).padStart(2, '0')}
+                  </Text>
+                </Flex>
 
-                    {/* Slide card */}
-                    <div className="border border-border bg-surface">
-                      <div className="border-b border-border px-4 py-2">
-                        <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                          [Query_Data]
-                        </span>
-                      </div>
-                      <div className="px-4 py-4">
-                        {d.title || d.summary ? (
-                          <>
-                            {d.title && (
-                              <h1 className="font-mono text-h1 text-on-surface mb-px uppercase tracking-[-0.01em]">
-                                {d.title}
-                              </h1>
-                            )}
-                            {d.summary && (
-                              <p className="font-body text-body text-on-surface-variant mt-1">
-                                {d.summary}
-                              </p>
-                            )}
-                          </>
-                        ) : (
-                          <div className="text-center py-4">
-                            <span className="material-symbols-outlined text-3xl text-muted">
-                              visibility_off
-                            </span>
-                            <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-                              {'>'} No_Query
-                            </p>
-                          </div>
+                <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface">
+                  <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" px="4" py="2" borderBottomWidth="1px" borderColor="border.subtle">
+                    Query Data
+                  </Text>
+                  <Box p="4">
+                    {d.title || d.summary ? (
+                      <>
+                        {d.title && (
+                          <Heading size="sm" mb="1" textTransform="uppercase" letterSpacing="tight">
+                            {d.title}
+                          </Heading>
                         )}
-                      </div>
-                    </div>
-
-                    {/* Slide feedback form */}
-                    {previewRule.enabled ? (
-                      <FeedbackForm rule={previewRule} value="" onChange={() => {}} />
+                        {d.summary && (
+                          <Text color="fg.muted" fontSize="sm" lineHeight="relaxed">
+                            {d.summary}
+                          </Text>
+                        )}
+                      </>
                     ) : (
-                      <div className="border border-border bg-surface p-6 flex flex-col items-center justify-center text-center gap-2">
-                        <span className="material-symbols-outlined text-3xl text-muted">
-                          visibility_off
-                        </span>
-                        <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                          {'>'} Feedback is disabled for this slide.
-                        </p>
-                      </div>
+                      <VStack py="4" gap="1" textAlign="center">
+                        <Icon color="fg.muted" boxSize="6">
+                          <EyeOffIcon />
+                        </Icon>
+                        <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                          No content
+                        </Text>
+                      </VStack>
                     )}
+                  </Box>
+                </Box>
 
-                    {/* Default questions */}
-                    {previewDefaultQuestions.map((q) => (
-                      <DefaultQuestionForm key={q.id} question={q} value="" onChange={() => {}} />
-                    ))}
-                  </main>
-                </div>
+                {previewRule.enabled ? (
+                  <FeedbackForm rule={previewRule} value="" onChange={() => {}} />
+                ) : (
+                  <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" p="6" textAlign="center">
+                    <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                      Feedback is disabled for this slide.
+                    </Text>
+                  </Box>
+                )}
 
-                {/* Bottom-anchored submit bar (mirrors ViewSession's fixed bar). */}
-                <div
-                  className="absolute bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 pt-3"
-                  style={{ paddingBottom: '12px' }}
-                >
-                  <div className="max-w-md mx-auto">
-                    <button
-                      type="button"
-                      disabled
-                      className="term-button-primary w-full !py-3.5 min-h-[48px]"
-                    >
-                      <span>Submit_Response</span>
-                      <span className="material-symbols-outlined text-[18px]">send</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </aside>
-      </div>
+                {previewDefaultQuestions.map((q) => (
+                  <DefaultQuestionForm key={q.id} question={q} value="" onChange={() => {}} />
+                ))}
+              </Box>
 
-      <section className="mt-6 term-card">
-        <div className="border-b border-border px-5 py-4 flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary">stars</span>
-          <div>
-            <div className="term-label-strong">[Default_Questions]</div>
-            <p className="font-body text-body text-on-surface-variant mt-1">
-              Generic questions shown on the selected slides in addition to each slide's own feedback.
-            </p>
-          </div>
-        </div>
+              {/* Bottom submit bar */}
+              <Box px="4" pt="3" pb="12px" borderTopWidth="1px" borderColor="border.subtle" bg="bg.panel">
+                <Button colorPalette="green" w="full" size="lg" disabled>
+                  Submit Response
+                </Button>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+      </Grid>
 
-        <div className="p-5 flex flex-col gap-4">
-          <div>
-            <label className="term-label block mb-1.5">[Question_Text]</label>
-            <input
-              className="term-input px-3 py-2"
+      {/* Default questions */}
+      <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" mt="2">
+        <Box px="5" py="4" borderBottomWidth="1px" borderColor="border.subtle">
+          <HStack gap="2">
+            <Star size={18} color="var(--chakra-colors-green-solid)" />
+            <Box>
+              <Heading size="sm" textTransform="uppercase" letterSpacing="wide">
+                Default Questions
+              </Heading>
+              <Text color="fg.muted" fontSize="sm" mt="1">
+                Generic questions shown on the selected slides in addition to each slide&apos;s own feedback.
+              </Text>
+            </Box>
+          </HStack>
+        </Box>
+
+        <VStack gap="4" align="stretch" p="5">
+          <Field.Root>
+            <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+              Question Text
+            </FieldLabel>
+            <Input
               value={dqText}
               onChange={(e) => setDqText(e.target.value)}
               placeholder={dqType === 'interested' ? 'Are you interested in this?' : 'Rate this slide'}
+              size="lg"
             />
-          </div>
-          <div className="flex flex-wrap gap-6 font-mono text-micro uppercase tracking-[0.18em] text-on-surface-variant">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                className="accent-primary"
-                checked={dqType === 'interested'}
-                onChange={() => setDqType('interested')}
-              />
-              <span className="material-symbols-outlined text-[16px]">thumb_up</span>
-              Interested / Not_Interested
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                className="accent-primary"
-                checked={dqType === 'rating'}
-                onChange={() => setDqType('rating')}
-              />
-              <span className="material-symbols-outlined text-[16px]">linear_scale</span>
-              0 - 10 Rating
-            </label>
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="term-label">[Apply_To]</span>
-              <label className="flex items-center gap-2 font-mono text-micro uppercase tracking-[0.18em] cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="accent-primary w-4 h-4"
-                  checked={dqAll}
-                  onChange={(e) => setDqAll(e.target.checked)}
-                />
-                All_Slides
-              </label>
-            </div>
+          </Field.Root>
+
+          <RadioGroup.Root
+            value={dqType}
+            onValueChange={(e) => setDqType(e.value as DefaultQuestionType)}
+            colorPalette="green"
+          >
+            <HStack gap="6">
+              <RadioGroup.Item value="interested">
+                <RadioGroup.ItemControl />
+                <RadioGroup.ItemText fontSize="sm">Interested / Not Interested</RadioGroup.ItemText>
+              </RadioGroup.Item>
+              <RadioGroup.Item value="rating">
+                <RadioGroup.ItemControl />
+                <RadioGroup.ItemText fontSize="sm">0 — 10 Rating</RadioGroup.ItemText>
+              </RadioGroup.Item>
+            </HStack>
+          </RadioGroup.Root>
+
+          <Box>
+            <Flex align="center" justify="space-between" mb="2">
+              <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                Apply To
+              </Text>
+              <Checkbox.Root checked={dqAll} onCheckedChange={(e) => setDqAll(!!e.checked)}>
+                <Checkbox.HiddenInput />
+                <Checkbox.Control />
+                <Checkbox.Label fontSize="xs">All Slides</Checkbox.Label>
+              </Checkbox.Root>
+            </Flex>
             {!dqAll && (
-              <div className="flex flex-wrap gap-px bg-border border border-border w-fit">
+              <Flex gap="1" flexWrap="wrap">
                 {Array.from({ length: presentation.slideCount }, (_, i) => i + 1).map((n) => (
-                  <button
+                  <Button
                     key={n}
-                    type="button"
+                    size="sm"
+                    variant={dqSelected.includes(n) ? 'solid' : 'outline'}
+                    colorPalette={dqSelected.includes(n) ? 'green' : undefined}
+                    minW="9"
                     onClick={() => toggleSlide(n)}
-                    className={`w-9 h-9 font-mono text-label uppercase ${
-                      dqSelected.includes(n) ? 'bg-primary text-on-primary' : 'bg-surface text-muted hover:bg-surface-1'
-                    }`}
+                    fontFamily="mono"
                   >
                     {String(n).padStart(2, '0')}
-                  </button>
+                  </Button>
                 ))}
-              </div>
+              </Flex>
             )}
-          </div>
-          <div>
-            <button
-              onClick={addDefaultQuestion}
-              disabled={dqBusy || !dqText.trim()}
-              className="term-button-primary min-h-[44px]"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              {dqBusy ? 'Adding...' : 'Add_Default_Question'}
-            </button>
-          </div>
-        </div>
+          </Box>
+
+          <Button
+            colorPalette="green"
+            w="fit-content"
+            onClick={addDefaultQuestion}
+            disabled={dqBusy || !dqText.trim()}
+          >
+            <Plus size={16} />
+            {dqBusy ? 'Adding…' : 'Add Default Question'}
+          </Button>
+        </VStack>
 
         {defaultQuestions.length > 0 && (
-          <div className="border-t border-border px-5 py-4 flex flex-col gap-2">
+          <Box borderTopWidth="1px" borderColor="border.subtle" px="5" py="4" display="flex" flexDirection="column" gap="2">
             {defaultQuestions.map((q) => (
-              <div
+              <Flex
                 key={q.id}
-                className="flex items-center justify-between gap-3 p-3 bg-surface-1 border border-border"
+                align="center"
+                justify="space-between"
+                gap="3"
+                p="3"
+                bg="bg.muted"
+                borderRadius="lg"
+                borderWidth="1px"
+                borderColor="border.subtle"
               >
-                <div className="min-w-0">
-                  <p className="font-mono text-body text-on-surface truncate">{q.questionText}</p>
-                  <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                    {q.questionType === 'interested' ? 'Interested / Not_Interested' : '0-10 Rating'} &nbsp;·&nbsp;{' '}
-                    Slides{' '}
+                <Box minW="0">
+                  <Text fontWeight="medium" truncate>
+                    {q.questionText}
+                  </Text>
+                  <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mt="0.5">
+                    {q.questionType === 'interested' ? 'Interested / Not Interested' : '0–10 Rating'} · Slides{' '}
                     {q.targetSlides.length === presentation.slideCount ? 'all' : q.targetSlides.join(', ')}
-                  </p>
-                </div>
-                <button
-                  onClick={() => removeDefaultQuestion(q.id)}
-                  className="text-danger hover:bg-[#fef2f2] p-2 transition"
-                  title="Remove"
-                >
-                  <span className="material-symbols-outlined text-[18px]">delete</span>
-                </button>
-              </div>
+                  </Text>
+                </Box>
+                <Button variant="ghost" colorPalette="red" size="sm" onClick={() => removeDefaultQuestion(q.id)} aria-label="Remove">
+                  <Trash2 size={16} />
+                </Button>
+              </Flex>
             ))}
-          </div>
+          </Box>
         )}
-      </section>
+      </Box>
 
-      {showNamePrompt && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/30 backdrop-blur-sm"
-          onClick={() => setShowNamePrompt(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="configure-session-name-title"
-        >
-          <div className="term-card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="border-b border-border px-5 py-4">
-              <div className="term-label">[New_Session]</div>
-              <h2 id="configure-session-name-title" className="font-mono text-h1 text-on-surface mt-1">
-                Name this session?
-              </h2>
-            </div>
-            <form
-              className="px-5 py-5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                createSession();
-              }}
-            >
-              <label className="term-label block mb-1.5" htmlFor="configure-session-name-input">
-                Session_Name
-              </label>
-              <input
-                id="configure-session-name-input"
-                autoFocus
-                value={sessionName}
-                onChange={(e) => setSessionName(e.target.value)}
-                maxLength={120}
-                placeholder="e.g. Q3 Board Review"
-                className="w-full h-11 px-3 border border-border bg-surface font-mono text-body text-on-surface placeholder:text-muted focus:border-primary focus:outline-none"
-              />
-              <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mt-3">
-                {'>'} You can leave this blank — we&apos;ll use the session code.
-              </p>
-              <div className="flex justify-end gap-2 border-t border-border px-5 py-4 -mx-5 -mb-5 mt-5">
-                <button type="button" onClick={() => setShowNamePrompt(false)} className="term-button-secondary min-h-[44px]">
+      {/* Session name dialog */}
+      <Dialog.Root open={showNamePrompt} onOpenChange={(e) => e.open === false && setShowNamePrompt(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Name this session?</DialogTitle>
+            <DialogCloseTrigger />
+          </DialogHeader>
+          <DialogBody>
+            <VStack as="form" gap="4" align="stretch" onSubmit={(e) => { e.preventDefault(); createSession(); }}>
+              <Field.Root>
+                <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                  Session Name
+                </FieldLabel>
+                <Input
+                  autoFocus
+                  value={sessionName}
+                  onChange={(e) => setSessionName(e.target.value)}
+                  maxLength={120}
+                  placeholder="e.g. Q3 Board Review"
+                  size="lg"
+                />
+              </Field.Root>
+              <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                Leave blank — we&apos;ll use the session code.
+              </Text>
+              <HStack justify="flex-end" gap="2">
+                <Button variant="outline" onClick={() => setShowNamePrompt(false)}>
                   Cancel
-                </button>
-                <button type="submit" className="term-button-primary min-h-[44px]">
-                  Create_Session
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </>
+                </Button>
+                <Button type="submit" colorPalette="green">
+                  Create Session
+                </Button>
+              </HStack>
+            </VStack>
+          </DialogBody>
+        </DialogContent>
+      </Dialog.Root>
+    </VStack>
+  );
+}
+
+function BlockIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="m9 9 6 6" />
+      <path d="m15 9-6 6" />
+    </svg>
+  );
+}
+
+function ToggleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="5" width="22" height="14" rx="7" />
+      <circle cx="16" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function ChecklistIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m9 11 3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" x2="22" y1="2" y2="22" />
+    </svg>
   );
 }

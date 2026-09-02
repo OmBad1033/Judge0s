@@ -1,6 +1,42 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Box,
+  Button,
+  Flex,
+  Grid,
+  Heading,
+  HStack,
+  Icon,
+  IconButton,
+  Progress,
+  Separator,
+  SimpleGrid,
+  Spinner,
+  Text,
+  Tooltip,
+  VStack,
+} from '@chakra-ui/react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  BarChart3,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Copy,
+  Download,
+  Group,
+  Pause,
+  Play,
+  Share2,
+  StopCircle,
+  Users,
+} from 'lucide-react';
 import { api, ApiError } from '../../api';
 import { usePresentationSocket } from '../../usePresentationSocket';
 import type { Session, ControlState, SessionParticipant, SlideEventRule } from '../../types';
@@ -8,15 +44,11 @@ import { liveAggregate } from '../../lib/metrics';
 import { useToast } from '../../lib/toast';
 import ConnectionStatus from '../../components/ConnectionStatus';
 import SessionQRCode from '../../components/SessionQRCode';
-import Skeleton from '../../components/Skeleton';
+import { SkeletonRows } from '../../components/ui/skeleton';
 import FeedbackForm from '../../components/FeedbackForm';
 import DefaultQuestionForm from '../../components/DefaultQuestionForm';
+import { PageHeader } from '../../components/ui/page-header';
 
-// Admin's "remote control" for a live session. Mobile-first by default:
-//   • Big bottom-anchored Prev/Next/Pause/End bar
-//   • Single-column on phones; multi-column on lg+
-//   • Slide picker for non-linear control (no more tap-tap-tap to slide 30)
-//   • Live stats sheet pulls real data (FR-3) when available, falls back gracefully
 export default function ControlSession() {
   const { code } = useParams();
   const queryClient = useQueryClient();
@@ -43,7 +75,6 @@ export default function ControlSession() {
     enabled: !!code,
   });
 
-  // Refresh the control state when the active slide changes via WS.
   useEffect(() => {
     if (event?.type === 'SLIDE_CHANGED') {
       queryClient.invalidateQueries({ queryKey });
@@ -51,7 +82,6 @@ export default function ControlSession() {
     }
   }, [event, queryClient, queryKey, code]);
 
-  // Keep local session in sync with the query.
   useEffect(() => {
     if (sessionQ.data) setSession(sessionQ.data);
   }, [sessionQ.data]);
@@ -93,7 +123,6 @@ export default function ControlSession() {
       toast.push('warning', 'Session paused.');
     },
     onError: (e) => {
-      // 404 / 409 silently on this one — backend may not have shipped FR-4 yet.
       if (!(e instanceof ApiError)) setErr('Pause failed');
     },
   });
@@ -113,14 +142,10 @@ export default function ControlSession() {
     queryKey: ['participants', code],
     queryFn: () => api.listSessionParticipants(code!),
     enabled: !!code && session?.status === 'live',
-    // FR-5 — backend not shipped yet returns 404; fall back to empty list silently.
     retry: false,
     refetchInterval: 10_000,
   });
 
-  // Live "User View" preview — the admin's socket doesn't receive the rich
-  // slide payload (that goes to participants), so we poll the same
-  // current-slide endpoint the participant REST bootstrap uses.
   const currentSlideQ = useQuery({
     queryKey: ['current-slide', code],
     queryFn: () => api.currentSlide(code!),
@@ -157,20 +182,15 @@ export default function ControlSession() {
   };
 
   if (sessionQ.isLoading || !session) {
-    return (
-      <div className="px-4 py-6">
-        <Skeleton variant="card" />
-        <div className="h-4" />
-        <Skeleton variant="card" rows={4} />
-      </div>
-    );
+    return <SkeletonRows rows={4} />;
   }
 
   if (sessionQ.error) {
     return (
-      <div className="term-card p-6 text-center font-mono text-micro uppercase tracking-[0.15em] text-danger">
-        Session not found.
-      </div>
+      <Alert.Root status="error" borderRadius="lg">
+        <Alert.Indicator />
+        <Alert.Title>Session not found.</Alert.Title>
+      </Alert.Root>
     );
   }
 
@@ -181,12 +201,8 @@ export default function ControlSession() {
   const currentResponses = stats?.currentSlideResponseCount ?? controlQ.data?.currentSlideResponseCount ?? 0;
   const score = liveAggregate(participantCount, currentResponses);
 
-  // Live participant preview — prefer the polled current-slide payload (rich:
-  // slide + feedbackRule + defaultQuestions). The WS event for admins only
-  // carries the slide number, so it's a fallback for the slide number.
   const liveEvent = currentSlideQ.data ?? event;
-  const liveRule: SlideEventRule | null =
-    liveEvent?.type === 'SLIDE_CHANGED' ? (liveEvent.feedbackRule ?? null) : null;
+  const liveRule: SlideEventRule | null = liveEvent?.type === 'SLIDE_CHANGED' ? (liveEvent.feedbackRule ?? null) : null;
   const liveDefaultQuestions = liveEvent?.type === 'SLIDE_CHANGED' ? (liveEvent.defaultQuestions ?? []) : [];
   const liveSlide = liveEvent?.type === 'SLIDE_CHANGED' ? (liveEvent.slide ?? undefined) : undefined;
 
@@ -195,133 +211,93 @@ export default function ControlSession() {
   const isEnded = session.status === 'ended';
   const isPaused = session.status === 'paused';
 
-  const StatusPill = () => {
-    if (isLive)
-      return (
-        <span className="status-pill status-pill-live">
-          <span className="w-1.5 h-1.5 bg-primary rounded-full pulse-emerald inline-block" />
-          Live_Executor
-        </span>
-      );
-    if (isPaused)
-      return (
-        <span className="status-pill status-pill-draft">
-          <span className="w-1.5 h-1.5 bg-warning rounded-full inline-block" />
-          Paused
-        </span>
-      );
-    if (isEnded) return <span className="status-pill status-pill-ended">Ended</span>;
-    return <span className="status-pill status-pill-draft">Draft</span>;
-  };
-
   return (
-    <div className="pb-32 lg:pb-6">
-      {/* HEADER */}
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4 mb-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <StatusPill />
-            <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-              [Control_Room]
-            </span>
-          </div>
-          <h1 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface truncate">
-            {session.presentationTitle}
-          </h1>
-          <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-            {max} Slides &nbsp;·&nbsp; {participantCount} Nodes
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ConnectionStatus state={connected ? 'connected' : 'reconnecting'} size="md" />
-          <button onClick={copyCode} className="border border-border bg-surface px-3 py-2 inline-flex items-center gap-2 min-h-[44px]">
-            <div className="text-left">
-              <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted">[Code]</div>
-              <div className="font-mono text-h1 text-on-surface leading-none">{session.sessionCode}</div>
-            </div>
-            <span className="material-symbols-outlined text-[18px] text-muted">
-              {copied ? 'check' : 'content_copy'}
-            </span>
-          </button>
-          {(isLive || isPaused) && (
-            <button
-              onClick={() => endMut.mutate()}
-              disabled={endMut.isPending}
-              className="term-button-danger min-h-[44px] hidden lg:inline-flex"
-              aria-label="End session"
-            >
-              <span className="material-symbols-outlined text-[18px]">stop</span>
-              <span>End_Session</span>
-            </button>
-          )}
-        </div>
-      </div>
+    <Box pb={{ base: '28', lg: '6' }}>
+      <PageHeader
+        eyebrow={session.status.toUpperCase()}
+        title={session.presentationTitle}
+        description={`${max} Slides · ${participantCount} Participants`}
+        actions={
+          <>
+            <ConnectionStatus state={connected ? 'connected' : 'reconnecting'} size="md" />
+            <Button variant="outline" onClick={copyCode} title="Copy code">
+              <Text fontFamily="mono" fontWeight="bold" fontSize="lg">
+                {session.sessionCode}
+              </Text>
+              {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+            </Button>
+            {(isLive || isPaused) && (
+              <Button colorPalette="red" onClick={() => endMut.mutate()} disabled={endMut.isPending} display={{ base: 'none', lg: 'inline-flex' }}>
+                <StopCircle size={16} />
+                End Session
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {err && (
-        <div className="term-card border-danger bg-[#fef2f2] px-4 py-3 font-mono text-micro uppercase tracking-[0.15em] text-danger mb-4">
-          {'>'} {err}
-        </div>
+        <Alert.Root status="error" borderRadius="lg" mb="4">
+          <Alert.Indicator />
+          <Alert.Title>{err}</Alert.Title>
+        </Alert.Root>
       )}
 
       {/* DRAFT — LOBBY */}
       {isDraft && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="term-card">
-            <div className="px-5 py-6 text-center">
-              <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted">[Pre-Flight]</div>
-              <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mt-2">
+        <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap="4">
+          <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="6" textAlign="center">
+            <VStack gap="3">
+              <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                Pre-Flight
+              </Text>
+              <Heading size="lg" textTransform="uppercase" letterSpacing="tight">
                 Session Ready
-              </h2>
-              <p className="font-body text-body text-on-surface-variant max-w-md mx-auto mt-2 mb-6">
-                Participants can join the lobby using the code below. They won't see the presentation
+              </Heading>
+              <Text color="fg.muted" fontSize="sm" maxW="md">
+                Participants can join the lobby using the code below. They won&apos;t see the presentation
                 until you go live.
-              </p>
-              <button
-                onClick={() => startMut.mutate()}
-                disabled={startMut.isPending}
-                className="term-button-primary !px-8 !py-3.5 min-h-[48px] mx-auto"
-              >
-                <span className="material-symbols-outlined text-[18px]">sensors</span>
-                {startMut.isPending ? 'Starting...' : 'Go_Live'}
-              </button>
-            </div>
-          </div>
+              </Text>
+              <Button colorPalette="green" size="lg" mt="2" onClick={() => startMut.mutate()} disabled={startMut.isPending}>
+                <SensorsIcon />
+                {startMut.isPending ? 'Starting…' : 'Go Live'}
+              </Button>
+            </VStack>
+          </Box>
 
-          <div className="term-card p-5 flex flex-col items-center justify-center gap-3">
-            <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-              [Share_With_Participants]
-            </div>
+          <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="5" display="flex" flexDirection="column" alignItems="center" justifyContent="center" gap="3">
+            <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+              Share with Participants
+            </Text>
             <SessionQRCode code={session.sessionCode} size={180} />
-            <button onClick={shareLink} className="term-button-secondary">
-              <span className="material-symbols-outlined text-[16px]">share</span>
-              <span>Share_Link</span>
-            </button>
-          </div>
-        </div>
+            <Button variant="outline" onClick={shareLink}>
+              <Share2 size={16} />
+              Share Link
+            </Button>
+          </Box>
+        </Grid>
       )}
 
       {/* LIVE / PAUSED */}
       {(isLive || isPaused) && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <Grid templateColumns={{ base: '1fr', lg: '8fr 4fr' }} gap="4">
           {/* LEFT — slide + stats */}
-          <div className="lg:col-span-8 flex flex-col gap-4">
-            <div className="term-card">
-              <div className="border-b border-border px-4 py-2 flex items-center justify-between">
-                <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                  [Current_Slide]
-                </span>
-                <button
+          <VStack gap="4" align="stretch">
+            <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" overflow="hidden">
+              <Flex align="center" justify="space-between" px="4" py="2" borderBottomWidth="1px" borderColor="border.subtle">
+                <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                  Current Slide
+                </Text>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setShowSlidePicker((v) => !v)}
-                  className="font-mono text-micro uppercase tracking-[0.18em] text-on-surface hover:text-primary inline-flex items-center gap-1 min-h-[36px] px-2"
+                  fontFamily="mono"
                 >
-                  <span>
-                    {String(current).padStart(2, '0')} / {String(max).padStart(2, '0')}
-                  </span>
-                  <span className="material-symbols-outlined text-[16px]">
-                    {showSlidePicker ? 'expand_less' : 'expand_more'}
-                  </span>
-                </button>
-              </div>
+                  {String(current).padStart(2, '0')} / {String(max).padStart(2, '0')}
+                  {showSlidePicker ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </Button>
+              </Flex>
 
               {showSlidePicker && (
                 <SlidePicker
@@ -335,212 +311,200 @@ export default function ControlSession() {
                 />
               )}
 
-              <div className="relative bg-surface-1">
-                <button
+              <Box position="relative" bg="bg.muted" p="6" minH="240px">
+                <IconButton
+                  aria-label="Previous slide"
+                  variant="outline"
+                  position="absolute"
+                  left="2"
+                  top="1/2"
+                  transform="translateY(-50%)"
+                  zIndex="10"
+                  display={{ base: 'none', lg: 'inline-flex' }}
                   onClick={() => slideMut.mutate(Math.max(1, current - 1))}
                   disabled={busy || current <= 1}
-                  className="hidden lg:flex absolute left-2 top-1/2 -translate-y-1/2 z-10 border border-border bg-surface/90 hover:bg-surface min-h-[44px] min-w-[44px] items-center justify-center"
-                  aria-label="Previous slide"
                 >
-                  <span className="material-symbols-outlined text-[20px]">chevron_left</span>
-                </button>
-                <button
+                  <ChevronLeft size={20} />
+                </IconButton>
+                <IconButton
+                  aria-label="Next slide"
+                  variant="outline"
+                  position="absolute"
+                  right="2"
+                  top="1/2"
+                  transform="translateY(-50%)"
+                  zIndex="10"
+                  display={{ base: 'none', lg: 'inline-flex' }}
                   onClick={() => slideMut.mutate(Math.min(max, current + 1))}
                   disabled={busy || current >= max}
-                  className="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 z-10 border border-border bg-surface/90 hover:bg-surface min-h-[44px] min-w-[44px] items-center justify-center"
-                  aria-label="Next slide"
                 >
-                  <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-                </button>
-                <div className="aspect-video flex flex-col items-center justify-center text-center p-6">
-                  {slide?.title ? (
-                    <h3 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mb-2">
-                      {slide.title}
-                    </h3>
-                  ) : (
-                    <h3 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mb-2">
-                      Slide {String(current).padStart(2, '0')}
-                    </h3>
-                  )}
+                  <ChevronRight size={20} />
+                </IconButton>
+
+                <VStack justify="center" minH="200px" textAlign="center" gap="2">
+                  <Heading size="lg" textTransform="uppercase" letterSpacing="tight">
+                    {slide?.title ?? `Slide ${String(current).padStart(2, '0')}`}
+                  </Heading>
                   {slide?.summary ? (
-                    <p className="font-body text-body text-on-surface-variant max-w-2xl">{slide.summary}</p>
+                    <Text color="fg.muted" maxW="2xl">
+                      {slide.summary}
+                    </Text>
                   ) : (
-                    <p className="font-mono text-body text-muted">No_Content</p>
+                    <Text color="fg.muted" fontSize="sm">
+                      No content
+                    </Text>
                   )}
-                </div>
-              </div>
+                </VStack>
+              </Box>
 
-              {/* Progress bar (desktop only — mobile uses the bottom-anchored controls). */}
-              <div className="hidden lg:block border-t border-border p-3">
-                <div className="h-2 bg-surface-1 border border-border">
-                  <div
-                    className="h-full bg-primary transition-all"
-                    style={{ width: `${max ? (current / max) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
-            </div>
+              {/* Progress */}
+              <Box px="4" py="3" borderTopWidth="1px" borderColor="border.subtle">
+                <Progress.Root value={max ? (current / max) * 100 : 0} size="xs">
+                  <Progress.Track>
+                    <Progress.Range bg="green.solid" />
+                  </Progress.Track>
+                </Progress.Root>
+              </Box>
+            </Box>
 
-            <div className="hidden lg:flex items-center gap-2">
-              <Link to={`/admin/sessions/${code}/results`} className="term-button-secondary">
-                <span className="material-symbols-outlined text-[16px]">analytics</span>
-                View_Results / Export
+            <HStack gap="2" display={{ base: 'none', lg: 'flex' }}>
+              <Link to={`/admin/sessions/${code}/results`}>
+                <Button variant="outline">
+                  <Download size={16} />
+                  View Results / Export
+                </Button>
               </Link>
-              <Link to={`/admin/sessions/${code}/analytics`} className="term-button-secondary">
-                <span className="material-symbols-outlined text-[16px]">bar_chart</span>
-                Analytics
+              <Link to={`/admin/sessions/${code}/analytics`}>
+                <Button variant="outline">
+                  <BarChart3 size={16} />
+                  Analytics
+                </Button>
               </Link>
-            </div>
-          </div>
+            </HStack>
+          </VStack>
 
-          {/* RIGHT — User View phone preview, with live stats + participants below. */}
-          <div className="lg:col-span-4 flex flex-col gap-4">
-            <div className="term-card">
-              <div className="border-b border-border px-4 py-2">
-                <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                  [User_View — Phone]
-                </span>
-              </div>
-              <div className="bg-surface-2 p-4 flex justify-center">
-                <div
-                  className="bg-surface border border-border w-[320px] max-w-full shadow-hairline"
-                  style={{ borderRadius: '24px' }}
+          {/* RIGHT — phone preview + stats + participants */}
+          <VStack gap="4" align="stretch">
+            <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" overflow="hidden">
+              <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" px="4" py="2" borderBottomWidth="1px" borderColor="border.subtle">
+                User View — Phone
+              </Text>
+              <Box bg="bg.muted" p="4" display="flex" justifyContent="center">
+                <Box
+                  w="320px"
+                  maxW="full"
+                  borderRadius="24px"
+                  borderWidth="1px"
+                  borderColor="border.emphasized"
+                  bg="bg.surface"
+                  overflow="hidden"
+                  boxShadow="lg"
                 >
-                  {/* Phone "notch" decoration */}
-                  <div className="flex justify-center pt-2">
-                    <span className="block w-16 h-1 bg-border-strong" style={{ borderRadius: '2px' }} />
-                  </div>
+                  <Flex justify="center" pt="2">
+                    <Box w="16" h="1" bg="border.emphasized" borderRadius="full" />
+                  </Flex>
+                  <Box maxH="560px" overflowY="auto" p="4" display="flex" flexDirection="column" gap="4" pb="20">
+                    <Flex align="center" justify="space-between" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" px="3" py="2">
+                      <Text color="fg.muted" fontSize="xs" fontFamily="mono" textTransform="uppercase" letterSpacing="wider">
+                        Session: {session.sessionCode}
+                      </Text>
+                      <ConnectionStatus state={connected ? 'connected' : 'reconnecting'} />
+                    </Flex>
 
-                  {/* Inner screen: replicates ViewSession's mobile column. */}
-                  <div className="relative overflow-hidden" style={{ borderRadius: '24px' }}>
-                    <div className="max-h-[560px] overflow-y-auto">
-                      <main className="flex flex-col px-4 pt-4 pb-32 gap-4">
-                        {/* Top status strip */}
-                        <header className="flex items-center justify-between border border-border bg-surface px-3 py-2">
-                          <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                            [Session_Id: {session.sessionCode}]
-                          </span>
-                          <ConnectionStatus state={connected ? 'connected' : 'reconnecting'} />
-                        </header>
+                    <Flex align="center" justify="space-between" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" px="3" py="2">
+                      <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                        Active Slide
+                      </Text>
+                      <Text fontFamily="mono" fontSize="2xl" fontWeight="bold">
+                        {String(current || 1).padStart(2, '0')}
+                      </Text>
+                    </Flex>
 
-                        {/* Slide badge */}
-                        <div className="border border-border bg-surface px-3 py-2 flex items-center justify-between">
-                          <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                            [Active_Slide]
-                          </span>
-                          <span className="font-mono text-h1 text-on-surface">
-                            {String(current || 1).padStart(2, '0')}
-                          </span>
-                        </div>
-
-                        {/* Slide card */}
-                        <div className="border border-border bg-surface">
-                          <div className="border-b border-border px-4 py-2">
-                            <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                              [Query_Data]
-                            </span>
-                          </div>
-                          <div className="px-4 py-4">
-                            {liveSlide?.title || liveSlide?.summary ? (
-                              <>
-                                {liveSlide?.title && (
-                                  <h1 className="font-mono text-h1 text-on-surface mb-px uppercase tracking-[-0.01em]">
-                                    {liveSlide.title}
-                                  </h1>
-                                )}
-                                {liveSlide?.summary && (
-                                  <p className="font-body text-body text-on-surface-variant mt-1">
-                                    {liveSlide.summary}
-                                  </p>
-                                )}
-                              </>
-                            ) : (
-                              <div className="text-center py-4">
-                                <span className="material-symbols-outlined text-3xl text-muted">
-                                  visibility_off
-                                </span>
-                                <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-                                  {'>'} No_Query
-                                </p>
-                              </div>
+                    <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface">
+                      <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" px="4" py="2" borderBottomWidth="1px" borderColor="border.subtle">
+                        Query Data
+                      </Text>
+                      <Box p="4">
+                        {liveSlide?.title || liveSlide?.summary ? (
+                          <>
+                            {liveSlide?.title && (
+                              <Heading size="sm" mb="1" textTransform="uppercase" letterSpacing="tight">
+                                {liveSlide.title}
+                              </Heading>
                             )}
-                          </div>
-                        </div>
-
-                        {/* Slide feedback form */}
-                        {liveRule?.enabled && liveRule.type !== 'disabled' ? (
-                          <FeedbackForm rule={liveRule} value="" onChange={() => {}} />
+                            {liveSlide?.summary && (
+                              <Text color="fg.muted" fontSize="sm" lineHeight="relaxed">
+                                {liveSlide.summary}
+                              </Text>
+                            )}
+                          </>
                         ) : (
-                          <div className="border border-border bg-surface p-6 flex flex-col items-center justify-center text-center gap-2">
-                            <span className="material-symbols-outlined text-3xl text-muted">
-                              visibility_off
-                            </span>
-                            <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                              {'>'} Feedback is disabled for this slide.
-                            </p>
-                          </div>
+                          <VStack py="4" gap="1" textAlign="center">
+                            <Icon color="fg.muted" boxSize="6">
+                              <EyeOffIcon />
+                            </Icon>
+                            <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                              No content
+                            </Text>
+                          </VStack>
                         )}
+                      </Box>
+                    </Box>
 
-                        {/* Default questions */}
-                        {liveDefaultQuestions.map((dq) => (
-                          <DefaultQuestionForm key={dq.id} question={dq} value="" onChange={() => {}} />
-                        ))}
-                      </main>
-                    </div>
+                    {liveRule?.enabled && liveRule.type !== 'disabled' ? (
+                      <FeedbackForm rule={liveRule} value="" onChange={() => {}} />
+                    ) : (
+                      <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" p="6" textAlign="center">
+                        <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                          Feedback is disabled for this slide.
+                        </Text>
+                      </Box>
+                    )}
 
-                    {/* Bottom-anchored submit bar (mirrors ViewSession's fixed bar). */}
-                    <div
-                      className="absolute bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 pt-3"
-                      style={{ paddingBottom: '12px' }}
-                    >
-                      <div className="max-w-md mx-auto">
-                        <button type="button" disabled className="term-button-primary w-full !py-3.5 min-h-[48px]">
-                          <span>Submit_Response</span>
-                          <span className="material-symbols-outlined text-[18px]">send</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Live stats — below the phone preview on desktop, collapsible on mobile. */}
-            <div className={`term-card ${showStats ? '' : 'hidden lg:block'}`}>
-              <button
-                onClick={() => setShowStats((v) => !v)}
-                className="lg:cursor-default border-b border-border px-4 py-2 w-full flex items-center justify-between min-h-[40px]"
-              >
-                <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                  [Live_Stats]
-                </span>
-                <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted lg:hidden">
-                  {showStats ? 'Hide' : 'Show'}
-                </span>
-              </button>
-
-              <div className="p-4 grid grid-cols-2 gap-3">
-                <Stat label="Engagement" value={`${score}%`} sub={`${currentResponses}/${participantCount} responses`} />
-                <Stat
-                  label="Participants"
-                  value={String(participantCount)}
-                  sub={connected ? 'Live' : 'Reconnecting'}
-                />
-              </div>
-
-              {statsV2?.currentSlide?.fieldBreakdown && statsV2.currentSlide.fieldBreakdown.length > 0 && (
-                <div className="border-t border-border p-4">
-                  <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted mb-2">
-                    [Field_Breakdown]
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {statsV2.currentSlide.fieldBreakdown.map((f, i) => (
-                      <FieldBreakdown key={i} field={f} />
+                    {liveDefaultQuestions.map((dq) => (
+                      <DefaultQuestionForm key={dq.id} question={dq} value="" onChange={() => {}} />
                     ))}
-                  </div>
-                </div>
-              )}
-            </div>
+                  </Box>
+
+                  <Box px="4" pt="3" pb="12px" borderTopWidth="1px" borderColor="border.subtle" bg="bg.panel">
+                    <Button colorPalette="green" w="full" size="lg" disabled>
+                      Submit Response
+                    </Button>
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
+
+            {/* Live stats */}
+            <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" overflow="hidden">
+              <Button variant="ghost" w="full" justifyContent="space-between" px="4" py="2" onClick={() => setShowStats((v) => !v)}>
+                <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                  Live Stats
+                </Text>
+                <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" display={{ base: 'inline', lg: 'none' }}>
+                  {showStats ? 'Hide' : 'Show'}
+                </Text>
+              </Button>
+              <Box p="4" display={showStats ? 'block' : { base: 'none', lg: 'block' }}>
+                <SimpleGrid columns={2} gap="3">
+                  <StatBox label="Engagement" value={`${score}%`} sub={`${currentResponses}/${participantCount} responses`} />
+                  <StatBox label="Participants" value={String(participantCount)} sub={connected ? 'Live' : 'Reconnecting'} />
+                </SimpleGrid>
+
+                {statsV2?.currentSlide?.fieldBreakdown && statsV2.currentSlide.fieldBreakdown.length > 0 && (
+                  <Box borderTopWidth="1px" borderColor="border.subtle" mt="4" pt="4">
+                    <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mb="2">
+                      Field Breakdown
+                    </Text>
+                    <VStack gap="3" align="stretch">
+                      {statsV2.currentSlide.fieldBreakdown.map((f, i) => (
+                        <FieldBreakdown key={i} field={f} />
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
+              </Box>
+            </Box>
 
             <ParticipantList
               participants={participantsQ.data?.participants ?? []}
@@ -548,109 +512,104 @@ export default function ControlSession() {
               loading={participantsQ.isLoading}
               isMock={participantsQ.isError}
             />
-          </div>
-        </div>
+          </VStack>
+        </Grid>
       )}
 
       {/* ENDED */}
       {isEnded && (
-        <div className="term-card text-center px-5 py-10">
-          <span className="material-symbols-outlined text-4xl text-danger">stop_circle</span>
-          <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mt-3">
-            Session_Ended
-          </h2>
-          <p className="font-body text-body text-on-surface-variant mt-1 mb-6">
-            This feedback session is closed.
-          </p>
-          <div className="flex justify-center gap-2 flex-wrap">
-            <Link to={`/admin/sessions/${code}/results`} className="term-button-primary">
-              <span className="material-symbols-outlined text-[16px]">analytics</span>
-              View_Results &amp; Export
-            </Link>
-            <Link to={`/admin/sessions/${code}/analytics`} className="term-button-secondary">
-              <span className="material-symbols-outlined text-[16px]">bar_chart</span>
-              Analytics
-            </Link>
-            <Link to="/admin/presentations" className="term-button-secondary">
-              Back_To_Library
-            </Link>
-          </div>
-        </div>
+        <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" textAlign="center" py="10">
+          <VStack gap="3">
+            <Icon color="red.solid" boxSize="10">
+              <StopCircle />
+            </Icon>
+            <Heading size="lg" textTransform="uppercase" letterSpacing="tight">
+              Session Ended
+            </Heading>
+            <Text color="fg.muted">This feedback session is closed.</Text>
+            <HStack gap="2" justify="center" flexWrap="wrap" mt="2">
+              <Link to={`/admin/sessions/${code}/results`}>
+                <Button colorPalette="green">
+                  <Download size={16} />
+                  View Results &amp; Export
+                </Button>
+              </Link>
+              <Link to={`/admin/sessions/${code}/analytics`}>
+                <Button variant="outline">
+                  <BarChart3 size={16} />
+                  Analytics
+                </Button>
+              </Link>
+              <Link to="/admin/presentations">
+                <Button variant="outline">Back to Library</Button>
+              </Link>
+            </HStack>
+          </VStack>
+        </Box>
       )}
 
-      {/* MOBILE — bottom-anchored remote control bar (visible for live / paused). */}
+      {/* MOBILE — bottom-anchored remote control bar */}
       {(isLive || isPaused) && (
-        <div
-          className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-3 pt-2"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}
+        <Box
+          position="fixed"
+          bottom="0"
+          left="0"
+          right="0"
+          zIndex="30"
+          bg="bg.panel"
+          borderTopWidth="1px"
+          borderColor="border.subtle"
+          px="3"
+          pt="2"
+          pb="calc(env(safe-area-inset-bottom, 0px) + 8px)"
+          display={{ base: 'block', lg: 'none' }}
         >
-          <div className="grid grid-cols-4 gap-2">
-            <button
+          <SimpleGrid columns={4} gap="2">
+            <Button
+              variant="outline"
               onClick={() => slideMut.mutate(Math.max(1, current - 1))}
               disabled={busy || current <= 1}
-              className="term-button-secondary !py-3 min-h-[52px] !px-2"
-              aria-label="Previous slide"
+              h="13"
             >
-              <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-              <span className="hidden sm:inline">Prev</span>
-            </button>
-            <button
-              onClick={() => slideMut.mutate(Math.min(max, current + 1))}
-              disabled={busy || current >= max}
-              className="term-button-primary !py-3 min-h-[52px] !px-2"
-              aria-label="Next slide"
-            >
-              <span className="hidden sm:inline">Next</span>
-              <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
-            </button>
+              <ArrowLeft size={18} />
+            </Button>
+            <Button colorPalette="green" onClick={() => slideMut.mutate(Math.min(max, current + 1))} disabled={busy || current >= max} h="13">
+              <ArrowRight size={18} />
+            </Button>
             {isPaused ? (
-              <button
-                onClick={() => resumeMut.mutate()}
-                disabled={resumeMut.isPending}
-                className="term-button-secondary !py-3 min-h-[52px]"
-                aria-label="Resume session"
-              >
-                <span className="material-symbols-outlined text-[18px]">play_arrow</span>
-              </button>
+              <Button variant="outline" onClick={() => resumeMut.mutate()} disabled={resumeMut.isPending} h="13" aria-label="Resume">
+                <Play size={18} />
+              </Button>
             ) : (
-              <button
-                onClick={() => pauseMut.mutate()}
-                disabled={pauseMut.isPending}
-                className="term-button-secondary !py-3 min-h-[52px]"
-                aria-label="Pause session"
-              >
-                <span className="material-symbols-outlined text-[18px]">pause</span>
-              </button>
+              <Button variant="outline" onClick={() => pauseMut.mutate()} disabled={pauseMut.isPending} h="13" aria-label="Pause">
+                <Pause size={18} />
+              </Button>
             )}
-            <button
-              onClick={() => endMut.mutate()}
-              disabled={endMut.isPending}
-              className="term-button-danger !py-3 min-h-[52px] !px-2"
-              aria-label="End session"
-            >
-              <span className="material-symbols-outlined text-[18px]">stop</span>
-              <span className="hidden sm:inline">End</span>
-            </button>
-          </div>
-        </div>
+            <Button colorPalette="red" onClick={() => endMut.mutate()} disabled={endMut.isPending} h="13" aria-label="End">
+              <StopCircle size={18} />
+            </Button>
+          </SimpleGrid>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
-// ============================================================================
-// Local helpers
-// ============================================================================
-
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function StatBox({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="border border-border bg-surface-1 px-3 py-2">
-      <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted">{label}</div>
-      <div className="font-mono text-display-sm text-on-surface mt-1">{value}</div>
+    <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.muted" px="3" py="2">
+      <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+        {label}
+      </Text>
+      <Text fontSize="2xl" fontWeight="semibold" mt="1">
+        {value}
+      </Text>
       {sub && (
-        <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-0.5">{sub}</div>
+        <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mt="0.5">
+          {sub}
+        </Text>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -661,42 +620,49 @@ function FieldBreakdown({
     | { fieldId: string; feedbackType: 'boolean' | 'multiple_choice' | 'open_text'; counts: Record<string, number> }
     | { fieldId: string; questionType: 'interested' | 'rating'; average: number; count: number };
 }) {
-  // Discriminator — `feedbackType` for slide-rule fields, `questionType` for default questions.
   if ('feedbackType' in field) {
     const total = Object.values(field.counts).reduce((a, b) => a + b, 0) || 1;
     const entries = Object.entries(field.counts).sort(([, a], [, b]) => b - a);
     return (
-      <div>
-        <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted mb-1">
+      <Box>
+        <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mb="1">
           {field.feedbackType}
-        </div>
-        <div className="flex flex-col gap-1.5">
+        </Text>
+        <VStack gap="1.5" align="stretch">
           {entries.map(([k, v]) => (
-            <div key={k} className="flex items-center gap-2">
-              <span className="font-mono text-label text-on-surface min-w-[120px] truncate">{k}</span>
-              <div className="flex-1 h-2 bg-surface-2 border border-border overflow-hidden">
-                <div className="h-full bg-primary" style={{ width: `${(v / total) * 100}%` }} />
-              </div>
-              <span className="font-mono text-label text-muted">{v}</span>
-            </div>
+            <Flex key={k} align="center" gap="2">
+              <Text fontSize="sm" minW="120px" truncate>
+                {k}
+              </Text>
+              <Progress.Root value={(v / total) * 100} size="xs" flex="1">
+                <Progress.Track>
+                  <Progress.Range bg="green.solid" />
+                </Progress.Track>
+              </Progress.Root>
+              <Text fontSize="sm" color="fg.muted">
+                {v}
+              </Text>
+            </Flex>
           ))}
-        </div>
-      </div>
+        </VStack>
+      </Box>
     );
   }
   return (
-    <div>
-      <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted mb-1">
+    <Box>
+      <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mb="1">
         {field.questionType}
-      </div>
-      <div className="font-mono text-display-sm text-on-surface">
+      </Text>
+      <Text fontSize="2xl" fontWeight="semibold">
         {field.average.toFixed(1)}{' '}
-        <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">avg</span>
-        <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted ml-2">
+        <Text as="span" color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+          avg
+        </Text>
+        <Text as="span" color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" ml="2">
           ({field.count} responses)
-        </span>
-      </div>
-    </div>
+        </Text>
+      </Text>
+    </Box>
   );
 }
 
@@ -712,31 +678,29 @@ function SlidePicker({
   onPick: (n: number) => void;
 }) {
   return (
-    <div className="border-b border-border bg-surface-1 p-2 max-h-64 overflow-y-auto">
-      <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1.5">
+    <Box borderBottomWidth="1px" borderColor="border.subtle" bg="bg.muted" p="2" maxH="64" overflowY="auto">
+      <SimpleGrid columns={{ base: 4, sm: 6, lg: 8 }} gap="1.5">
         {Array.from({ length: max }).map((_, i) => {
           const n = i + 1;
           const meta = slides.find((s) => s.slideNumber === n);
           const active = n === current;
           const configured = meta?.configured ?? false;
           return (
-            <button
+            <Button
               key={n}
               onClick={() => onPick(n)}
-              className={`font-mono text-label uppercase tracking-[0.15em] py-2 border ${
-                active
-                  ? 'border-primary bg-primary-dim text-primary'
-                  : configured
-                    ? 'border-border bg-surface text-on-surface hover:border-primary'
-                    : 'border-border bg-surface text-muted hover:border-primary'
-              }`}
+              variant={active ? 'solid' : configured ? 'outline' : 'ghost'}
+              colorPalette={active ? 'green' : undefined}
+              size="sm"
+              fontFamily="mono"
+              color={!active && !configured ? 'fg.muted' : undefined}
             >
               {String(n).padStart(2, '0')}
-            </button>
+            </Button>
           );
         })}
-      </div>
-    </div>
+      </SimpleGrid>
+    </Box>
   );
 }
 
@@ -752,46 +716,71 @@ function ParticipantList({
   isMock: boolean;
 }) {
   if (loading) {
-    return (
-      <div className="term-card p-4">
-        <Skeleton variant="list" rows={4} />
-      </div>
-    );
+    return <SkeletonRows rows={3} />;
   }
 
   if (isMock || participants.length === 0) {
     return (
-      <div className="term-card p-4 flex flex-col items-center justify-center text-center gap-2 min-h-[180px]">
-        <span className="material-symbols-outlined text-3xl text-muted">group</span>
-        <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-          Waiting for participants to join
-        </p>
-        <p className="font-mono text-label text-on-surface">{participantCount} connected</p>
-      </div>
+      <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="4" textAlign="center">
+        <VStack gap="2">
+          <Icon color="fg.muted" boxSize="8">
+            <Users />
+          </Icon>
+          <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+            Waiting for participants to join
+          </Text>
+          <Text fontWeight="medium">{participantCount} connected</Text>
+        </VStack>
+      </Box>
     );
   }
 
   return (
-    <div className="term-card">
-      <div className="border-b border-border px-4 py-2 flex items-center justify-between">
-        <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-          [Participants]
-        </span>
-        <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+    <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" overflow="hidden">
+      <Flex align="center" justify="space-between" px="4" py="2" borderBottomWidth="1px" borderColor="border.subtle">
+        <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+          Participants
+        </Text>
+        <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
           {participants.length} / {participantCount}
-        </span>
-      </div>
-      <ul className="divide-y divide-border max-h-96 overflow-y-auto">
+        </Text>
+      </Flex>
+      <VStack gap="0" maxH="96" overflowY="auto" align="stretch">
         {participants.map((p) => (
-          <li key={p.id} className="px-3 py-2 flex items-center gap-2">
-            <span className="w-2 h-2 bg-primary rounded-full" aria-hidden />
-            <span className="font-mono text-body text-on-surface truncate flex-1">{p.name}</span>
-            <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+          <Flex key={p.id} align="center" gap="2" px="3" py="2" borderTopWidth="1px" borderColor="border.subtle" _first={{ borderTop: 'none' }}>
+            <Box w="2" h="2" borderRadius="full" bg="green.solid" />
+            <Text fontSize="sm" truncate flex="1">
+              {p.name}
+            </Text>
+            <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
               {p.totalResponses} resp
-            </span>
-          </li>
+            </Text>
+          </Flex>
         ))}
-      </ul>
-    </div>
+      </VStack>
+    </Box>
+  );
+}
+
+function SensorsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+      <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+      <path d="M7 12h10" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" x2="22" y1="2" y2="22" />
+    </svg>
   );
 }
