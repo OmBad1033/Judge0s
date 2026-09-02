@@ -84,10 +84,9 @@ export const api = {
     return { ok: true };
   },
 
-  createPresentation: (data: { title: string; slideCount?: number; file: File }) => {
+  createPresentation: (data: { title: string; file: File }) => {
     const form = new FormData();
     form.append('title', data.title);
-    if (data.slideCount !== undefined) form.append('slideCount', String(data.slideCount));
     form.append('file', data.file);
     return fetch('/api/presentations', { method: 'POST', credentials: 'include', body: form }).then(
       async (r) => {

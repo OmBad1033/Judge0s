@@ -1,7 +1,12 @@
 import type { Env } from '../env';
 import { newId, now } from '../utils/common';
-import { extractPdfSlides, type ExtractedPresentation } from './pdfExtraction';
-import { extractPptxSlides, deckToMarkdown } from './pptxExtraction';
+import { extractPdfSlides, countPdfPages, type ExtractedPresentation as PdfExtractedPresentation } from './pdfExtraction';
+import {
+  extractPptxSlides,
+  countPptxSlides,
+  deckToMarkdown,
+  type ExtractedPresentation as PptxExtractedPresentation,
+} from './pptxExtraction';
 
 const PPTX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const PDF_CONTENT_TYPE = 'application/pdf';
@@ -91,22 +96,20 @@ export async function createPresentation(
   const r2ObjectKey = `presentations/${id}/${input.file.name}`;
   const isPdf = isPdfFile(input.file.name);
 
-  // Extract per-slide content + count from the uploaded file and store the
-  // JSON summary next to the original in R2. Both paths share the same
-  // { source, fileName, slideCount, extractedAt, slides[] } shape.
+  // The slide count comes from the actual uploaded file (PDF page count / PPTX
+  // slide XML count). For PPTX we count every slideN.xml — including blank
+  // slides — so the configure screen shows the deck's true size. The full
+  // per-slide extraction (title/body/notes → R2) is deferred until the
+  // configure screen first loads (see ensurePresentationExtracted below), so
+  // upload only pays for the cheap count.
   let slideCount = input.slideCount;
-  let extracted: Awaited<ReturnType<typeof extractPdfSlides>> | Awaited<ReturnType<typeof extractPptxSlides>> | null = null;
-  let extractedJsonKey: string | null = null;
-  let extractedMdKey: string | null = null;
-  if (isPdf) {
-    extracted = await extractPdfSlides(input.file);
-    slideCount = extracted.slideCount;
-    extractedJsonKey = `${r2ObjectKey}.extracted.json`;
-  } else {
-    extracted = await extractPptxSlides(input.file);
-    slideCount = extracted.slideCount;
-    extractedJsonKey = `${r2ObjectKey}.extracted.json`;
-    extractedMdKey = `${r2ObjectKey}.extracted.md`;
+  try {
+    const buffer = await input.file.arrayBuffer();
+    slideCount = isPdf ? await countPdfPages(buffer) : await countPptxSlides(buffer);
+  } catch (e) {
+    // The count is best-effort at upload; the full extraction retries later
+    // and is the authoritative source. Fall back to the caller's override.
+    console.warn(`[extract] slide count failed for ${input.file.name}: ${(e as Error).message}`);
   }
 
   const contentType = contentTypeFor(input.file.name, input.file.type || PPTX_CONTENT_TYPE);
@@ -115,33 +118,14 @@ export async function createPresentation(
     httpMetadata: { contentType },
   });
 
-  if (extracted && extractedJsonKey) {
-    await env.PRESENTATION_BUCKET.put(extractedJsonKey, JSON.stringify(extracted), {
-      httpMetadata: { contentType: 'application/json' },
-    });
-    // Terminal visibility for the extraction pipeline — the summary JSON is
-    // what gets stored to R2 alongside the uploaded file.
-    console.log(`[extract] ${extracted.source} summary JSON saved to r2://${extractedJsonKey}`);
-    console.log(JSON.stringify(extracted, null, 2));
-
-    // PPTX also gets a Markdown rendering of the same structured content.
-    if (extractedMdKey && extracted.source === 'pptx') {
-      const md = deckToMarkdown(extracted as Awaited<ReturnType<typeof extractPptxSlides>>);
-      await env.PRESENTATION_BUCKET.put(extractedMdKey, md, {
-        httpMetadata: { contentType: 'text/markdown' },
-      });
-      console.log(`[extract] pptx markdown saved to r2://${extractedMdKey}`);
-      console.log(md);
-    }
-  } else {
-    console.warn(`[extract] no slide content extracted for ${input.file.name}`);
-  }
-
+  // The extracted JSON/Markdown keys are intentionally NULL at upload: the
+  // file is stored, but the per-slide extraction + extracted-content R2 objects
+  // are only written once the admin reaches the configure screen.
   await env.DB.prepare(
-    `INSERT INTO presentation_files (id, event_id, r2_key, original_name, status, slide_count, uploaded_by, uploaded_at, extracted_json_key, extracted_md_key)
-     VALUES (?, ?, ?, ?, 'ready', ?, ?, ?, ?, ?)`,
+    `INSERT INTO presentation_files (id, event_id, r2_key, original_name, status, slide_count, uploaded_by, uploaded_at)
+     VALUES (?, ?, ?, ?, 'ready', ?, ?, ?)`,
   )
-    .bind(fileId, id, r2ObjectKey, input.file.name, slideCount, uploadedBy, uploadedAt, extractedJsonKey, extractedMdKey)
+    .bind(fileId, id, r2ObjectKey, input.file.name, slideCount, uploadedBy, uploadedAt)
     .run();
 
   await env.DB.prepare(
@@ -161,14 +145,94 @@ export async function createPresentation(
     title: input.title,
     originalFilename: input.file.name,
     r2ObjectKey,
-    slideCount: slideCount!,
+    slideCount: slideCount ?? input.slideCount ?? 0,
     createdAt: uploadedAt,
     status: 'ready',
     presentationFileId: fileId,
     uploadedBy,
-    extractedJsonKey,
-    extractedMdKey,
+    extractedJsonKey: null,
+    extractedMdKey: null,
   };
+}
+
+/**
+ * Lazy per-slide extraction for an uploaded deck, run the first time the
+ * configure screen loads. Upload stores only the original file + a slide count;
+ * this fills in the extracted-content R2 objects (`.extracted.json` / `.extracted.md`)
+ * and the row's `extracted_*_key` columns so the AI configure path can read
+ * per-slide content.
+ *
+ * Idempotent — no-op if extraction is already present or there is no file row.
+ */
+export async function ensurePresentationExtracted(env: Env, eventId: string): Promise<void> {
+  const row = await env.DB.prepare(
+    `SELECT id, r2_key, original_name, extracted_json_key, extracted_md_key
+     FROM presentation_files
+     WHERE event_id = ?
+     ORDER BY uploaded_at DESC LIMIT 1`,
+  )
+    .bind(eventId)
+    .first<{
+      id: string;
+      r2_key: string;
+      original_name: string | null;
+      extracted_json_key: string | null;
+      extracted_md_key: string | null;
+    }>();
+  if (!row || row.extracted_json_key) return; // nothing to do / already done
+
+  // Pull the original file back out of R2 and run the full extractor. We read
+  // the R2 object straight into an ArrayBuffer and hand that to the extractor:
+  // rebuilding a `new File([...])` here would trip workerd's per-part Blob size
+  // limit for decks larger than 128 MB (the upload streams into R2 without that
+  // cap, so big decks can still get uploaded but failed lazy extraction).
+  const obj = await env.PRESENTATION_BUCKET.get(row.r2_key);
+  if (!obj) {
+    console.warn(`[extract] missing R2 object for presentation ${eventId}: ${row.r2_key}`);
+    return;
+  }
+
+  const originalName = row.original_name ?? 'deck.pptx';
+  const isPdf = isPdfFile(originalName);
+  const extractedJsonKey = `${row.r2_key}.extracted.json`;
+  const extractedMdKey = isPdf ? null : `${row.r2_key}.extracted.md`;
+
+  let extracted: PdfExtractedPresentation | PptxExtractedPresentation;
+  try {
+    const buffer = await obj.arrayBuffer();
+    extracted = isPdf ? await extractPdfSlides(buffer, originalName) : await extractPptxSlides(buffer, originalName);
+  } catch (e) {
+    // Extraction failure at configure time does not mean the upload failed —
+    // the original file is safely stored. Log it and retry on the next
+    // configure-page load.
+    console.error(`[extract] failed for presentation ${eventId}: ${(e as Error).message}`);
+    return;
+  }
+
+  await env.PRESENTATION_BUCKET.put(extractedJsonKey, JSON.stringify(extracted), {
+    httpMetadata: { contentType: 'application/json' },
+  });
+
+  if (extractedMdKey && extracted.source === 'pptx') {
+    const md = deckToMarkdown(extracted);
+    await env.PRESENTATION_BUCKET.put(extractedMdKey, md, {
+      httpMetadata: { contentType: 'text/markdown' },
+    });
+  }
+
+  // Update the row: store keys and a derived count (only if the row's current
+  // count is null/0, preserving the upload-time count that the configure
+  // screen already shows).
+  await env.DB.prepare(
+    `UPDATE presentation_files
+     SET extracted_json_key = ?, extracted_md_key = ?,
+         slide_count = CASE WHEN slide_count IS NULL OR slide_count = 0 THEN ? ELSE slide_count END
+     WHERE id = ?`,
+  )
+    .bind(extractedJsonKey, extractedMdKey, extracted.slideCount, row.id)
+    .run();
+
+  console.log(`[extract] ${extracted.source} content for presentation ${eventId} saved to r2://${extractedJsonKey}`);
 }
 
 export async function getPresentation(env: Env, id: string): Promise<Presentation | null> {

@@ -8,7 +8,7 @@ import * as eventService from '../services/eventService';
 
 const app = new Hono<{ Bindings: Env }>();
 
-const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_FILE_BYTES = 400 * 1024 * 1024;
 
 const defaultQuestionSchema = z.object({
   questionText: z.string().min(1),
