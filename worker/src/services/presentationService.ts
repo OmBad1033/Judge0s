@@ -302,6 +302,15 @@ export async function deletePresentation(env: Env, id: string): Promise<boolean>
     env.DB.prepare(
       `DELETE FROM feedback_fields WHERE slide_id IN (SELECT id FROM slides WHERE presentation_id = ?)`,
     ).bind(id),
+    // AI Slide Config — Phase 1/2 tables (FK to slides / events).
+    env.DB.prepare(
+      `DELETE FROM ai_field_suggestions WHERE slide_id IN (SELECT id FROM slides WHERE presentation_id = ?)`,
+    ).bind(id),
+    env.DB.prepare(
+      `DELETE FROM ai_slide_suggestions WHERE slide_id IN (SELECT id FROM slides WHERE presentation_id = ?)`,
+    ).bind(id),
+    env.DB.prepare(`DELETE FROM ai_generation_jobs WHERE event_id = ?`).bind(id),
+    env.DB.prepare(`DELETE FROM ai_chat_messages WHERE event_id = ?`).bind(id),
     env.DB.prepare(`DELETE FROM default_questions WHERE presentation_id = ?`).bind(id),
     env.DB.prepare(`DELETE FROM slides WHERE presentation_id = ?`).bind(id),
     env.DB.prepare(`DELETE FROM presentation_sessions WHERE presentation_id = ?`).bind(id),

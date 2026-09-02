@@ -100,6 +100,23 @@ export async function deleteEvent(env: Env, id: string): Promise<boolean> {
   return (result.meta.changes ?? 0) > 0;
 }
 
+// Presentation-level "what am I building" context for AI suggestions. Stored on
+// the event row (ai_context) so the same deck-level prompt applies to every
+// slide and feeds the generation cache key.
+export async function getEventAiContext(env: Env, id: string): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT ai_context FROM events WHERE id = ?')
+    .bind(id)
+    .first<{ ai_context: string | null }>();
+  return row?.ai_context ?? null;
+}
+
+export async function setEventAiContext(env: Env, id: string, aiContext: string | null): Promise<boolean> {
+  const result = await env.DB.prepare('UPDATE events SET ai_context = ?, updated_at = ? WHERE id = ?')
+    .bind(aiContext, now(), id)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
 // Compat helper — the legacy `presentations` table is now a 1:1 mirror of
 // `events` (Phase 7 set the same id on the presentation row and the
 // `events` row). Use this whenever the legacy `presentationId` parameter is

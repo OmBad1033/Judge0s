@@ -7,6 +7,9 @@ import events from './routes/events';
 import presentations from './routes/presentations';
 import slides from './routes/slides';
 import sessions from './routes/sessions';
+import billing from './routes/billing';
+import stripeWebhook from './routes/webhooks/stripe';
+import aiRoutes from './routes/ai';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -55,9 +58,19 @@ app.route('/api/admin', auth);
 app.route('/api/auth', authGoogle);
 // Phase 2 — Events + Sessions (new, additive).
 app.route('/api/events', events);
+// AI Slide Config — Phase 1. Paid-plan-gated AI endpoints under an event,
+// mounted at the app root (separate router so the `/api/events` router's own
+// `/:id` handlers don't shadow the AI paths).
+app.route('/api/events/:id/ai', aiRoutes);
 app.route('/api/presentations', presentations);
 app.route('/api/presentations/:id/slides', slides);
 app.route('/api/sessions', sessions);
+
+// AI Slide Config — Phase 0. The Stripe webhook is mounted before any global
+// body-parsing middleware (none exists today) so it can verify the raw body
+// signature.
+app.route('/api/billing', billing);
+app.route('/api/webhooks/stripe', stripeWebhook);
 
 // Phase 4 — WebSocket upgrade routes the connection to the SessionRoom DO
 // with a `?role=` query so the DO knows whether to send slide_changed

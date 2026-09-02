@@ -72,8 +72,26 @@ POST   /api/sessions/:code/join               { name, email } -> participantId
 POST   /api/sessions/:code/feedback            { participantId, slideNumber, response }
 GET    /api/sessions/:code/feedback/me?participantId=...
 
+POST   /api/billing/checkout                    (Stripe Checkout subscription)
+POST   /api/billing/portal                      (Stripe customer portal)
+POST   /api/webhooks/stripe                     (Stripe webhook — raw body signature)
+
+POST   /api/events/:id/ai/generate              (AI slide suggestions — paid gate)
+GET    /api/events/:id/ai/suggestions           (list pending per-slide suggestions)
+POST   /api/events/:id/ai/suggestions/:slideId/approve   (apply + optional edits)
+POST   /api/events/:id/ai/suggestions/:slideId/reject    (discard)
+POST   /api/events/:id/ai/suggestions/:slideId/revise    (regenerate w/ admin comments)
+POST   /api/events/:id/ai/chat                  (conversational config — not yet)
+POST   /api/events/:id/ai/chat/apply            (apply chat diff — not yet)
+
 GET    /ws/session/:code                       (WebSocket upgrade)
 ```
+
+The AI suggestion endpoints are exposed on the configure page: per-slide
+proposed title/summary/feedback fields with **Approve / Reject / Suggest
+changes** (free-text comment → model revises). Access is gated on the event
+owner's plan — free accounts get one presentation of AI access, then a
+`402 upgrade_required` paywall.
 
 ## Real-time protocol (server → client)
 

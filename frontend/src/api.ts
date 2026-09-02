@@ -17,6 +17,9 @@ import type {
   SessionStatsEventV2,
   SessionParticipant,
   SessionAnalytics,
+  AiGenerateResult,
+  AiSlideGenerateResult,
+  AiSuggestionList,
 } from './types';
 
 export class ApiError extends Error {
@@ -154,6 +157,32 @@ export const api = {
   // Post-session analytics dashboard.
   sessionAnalytics: (code: string) => json<SessionAnalytics>(`/api/sessions/${code}/analytics`, 'GET'),
   runSessionAi: (code: string) => json<SessionAnalytics>(`/api/sessions/${code}/analytics/ai`, 'POST'),
+
+  // AI slide suggestions (configure page) — mounted at /api/events/:id/ai on
+  // the worker; the legacy presentation id === the event id.
+  aiGenerate: (presentationId: string) =>
+    json<AiGenerateResult>(`/api/events/${presentationId}/ai/generate`, 'POST'),
+  aiGenerateSlide: (presentationId: string, slideNumber: number) =>
+    json<AiSlideGenerateResult>(`/api/events/${presentationId}/ai/slides/${slideNumber}/generate`, 'POST'),
+  aiContext: (presentationId: string) =>
+    json<{ context: string | null }>(`/api/events/${presentationId}/ai/context`, 'GET'),
+  aiSetContext: (presentationId: string, context: string) =>
+    json<{ ok: boolean; context: string | null }>(`/api/events/${presentationId}/ai/context`, 'PUT', { context }),
+  aiSuggestions: (presentationId: string) =>
+    json<AiSuggestionList>(`/api/events/${presentationId}/ai/suggestions`, 'GET'),
+  aiApprove: (
+    presentationId: string,
+    slideId: string,
+    body: { title?: string; summary?: string; comment?: string },
+  ) => json<{ ok: boolean }>(`/api/events/${presentationId}/ai/suggestions/${slideId}/approve`, 'POST', body),
+  aiReject: (presentationId: string, slideId: string, body: { comment?: string }) =>
+    json<{ ok: boolean }>(`/api/events/${presentationId}/ai/suggestions/${slideId}/reject`, 'POST', body),
+  aiRevise: (presentationId: string, slideId: string, comments: string) =>
+    json<{ ok: boolean; suggestion?: unknown }>(
+      `/api/events/${presentationId}/ai/suggestions/${slideId}/revise`,
+      'POST',
+      { comments },
+    ),
 
   // Acknowledgement of the latest live-stats broadcast shape.
   acknowledgeStats: (stats: SessionStatsEventV2) => stats,

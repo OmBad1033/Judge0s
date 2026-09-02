@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../env';
-import { adminGuard } from '../utils/auth';
+import { adminGuard, currentUser } from '../utils/auth';
 import * as presentationService from '../services/presentationService';
 import * as defaultQuestionService from '../services/defaultQuestionService';
 import * as eventService from '../services/eventService';
@@ -42,10 +42,15 @@ app.post('/', adminGuard, async (c) => {
 
   // Phase 2 — auto-create an Event for the presentation so the legacy
   // `presentationId` parameter and the new `eventId` are the same value.
-  const ev = await eventService.createEvent(c.env, { name: title, ownerId: 'local-admin' });
+  // AI gating (Phase 0/1) is owner-plan based, so the event owner must be the
+  // actual uploading user, not the synthetic local-admin.
+  const uploader = await currentUser(c);
+  const ownerId = uploader?.id ?? 'local-admin';
+  const ev = await eventService.createEvent(c.env, { name: title, ownerId });
   const presentation = await presentationService.createPresentation(
     c.env,
     { title, slideCount, file, eventId: ev.id },
+    { uploadedBy: ownerId },
   );
   return c.json(presentation, 201);
 });

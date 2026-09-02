@@ -17,3 +17,11 @@ ORIGIN_ALLOWLIST=http://localhost:5173
 # Model defaults to openai/gpt-4o-mini if OPENROUTER_MODEL is unset.
 OPENROUTER_API_KEY=
 OPENROUTER_MODEL=
+
+# AI Slide Config — Phase 0 billing (Stripe). Leave blank to disable the
+# billing routes. Set BILLING_BYPASS=1 only for local dev to skip plan gating
+# (auth still required); keep it off to exercise the real paywall.
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_ID=
+BILLING_BYPASS=

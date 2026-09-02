@@ -293,3 +293,54 @@ export interface SessionAnalytics {
   aiConfigured: boolean;
   aiResults?: { fieldId: string; ok: boolean; error?: string }[];
 }
+
+// --- AI slide suggestions (configure page) ---
+
+export type AiFieldType =
+  | 'boolean'
+  | 'single_select'
+  | 'multi_select'
+  | 'rating'
+  | 'nps'
+  | 'text'
+  | 'textarea';
+
+export interface AiFieldSuggestion {
+  id: string;
+  orderIndex: number;
+  fieldType: AiFieldType;
+  label: string;
+  options: string[] | null;
+  isRequired: boolean;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface AiSlideSuggestion {
+  slideId: string | null;
+  slideNumber: number;
+  suggestedTitle: string | null;
+  suggestedSummary: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string | null;
+  fields: AiFieldSuggestion[];
+}
+
+export interface AiGenerateResult {
+  ok: boolean;
+  slides?: number;
+  jobId?: string;
+  cached?: boolean;
+  error?: string;
+}
+
+export interface AiSlideGenerateResult {
+  ok: boolean;
+  slideNumber?: number;
+  suggestion?: AiSlideSuggestion;
+  cached?: boolean;
+  error?: string;
+}
+
+export interface AiSuggestionList {
+  suggestions: AiSlideSuggestion[];
+}

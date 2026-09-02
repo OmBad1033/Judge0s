@@ -7,6 +7,7 @@ import type {
   SlideEventRule,
   DefaultQuestion,
   DefaultQuestionType,
+  AiSlideSuggestion,
 } from '../../types';
 import { useToast } from '../../lib/toast';
 import {
@@ -37,12 +38,13 @@ import {
   Textarea,
   VStack,
 } from '@chakra-ui/react';
-import { Check, CheckCircle2, FilePen, Plus, Radar, Save, Star, Trash2 } from 'lucide-react';
+import { Check, CheckCircle2, FilePen, Plus, Radar, Save, Sparkles, Star, Trash2 } from 'lucide-react';
 import { PageHeader } from '../../components/ui/page-header';
 import { SkeletonRows } from '../../components/ui/skeleton';
 import ConnectionStatus from '../../components/ConnectionStatus';
 import FeedbackForm from '../../components/FeedbackForm';
 import DefaultQuestionForm from '../../components/DefaultQuestionForm';
+import AISuggestionPanel from '../../components/AISuggestionPanel';
 
 const TYPES: { value: FeedbackType; label: string; icon: React.ReactNode }[] = [
   { value: 'disabled', label: 'None', icon: <BlockIcon /> },
@@ -79,6 +81,44 @@ export default function ConfigureSlides() {
   const [dqBusy, setDqBusy] = useState(false);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [sessionName, setSessionName] = useState('');
+
+  // AI suggestions (Phase 2/3) — list of pending suggestions per slide.
+  const [aiSuggestions, setAiSuggestions] = useState<AiSlideSuggestion[]>([]);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSlideBusy, setAiSlideBusy] = useState(false);
+  const [aiLoaded, setAiLoaded] = useState(false);
+
+  // Deck-level "what are we building" context used for every AI suggestion.
+  const [aiContext, setAiContext] = useState<string | null>(null);
+  const [contextOpen, setContextOpen] = useState(false);
+  const [contextDraft, setContextDraft] = useState('');
+  const [contextBusy, setContextBusy] = useState(false);
+  const [contextLoaded, setContextLoaded] = useState(false);
+
+  const loadAiSuggestions = () => {
+    if (!id) return;
+    api
+      .aiSuggestions(id)
+      .then((r) => {
+        setAiSuggestions(r.suggestions);
+        setAiLoaded(true);
+      })
+      .catch(() => setAiLoaded(true)); // not gated-visible until generate succeeds
+  };
+  useEffect(loadAiSuggestions, [id]);
+
+  const loadAiContext = () => {
+    if (!id) return;
+    api
+      .aiContext(id)
+      .then((r) => {
+        setAiContext(r.context);
+        setContextDraft(r.context ?? '');
+        setContextLoaded(true);
+      })
+      .catch(() => setContextLoaded(true));
+  };
+  useEffect(loadAiContext, [id]);
 
   const loadDefaultQuestions = () => {
     if (!id) return;
@@ -136,6 +176,115 @@ export default function ConfigureSlides() {
       toast.push('success', `Slide ${i + 1} saved`);
     } catch (e) {
       toast.push('error', e instanceof ApiError ? e.message : 'Save failed');
+    }
+  };
+
+  // --- AI suggestion handlers --------------------------------------------
+
+  const generateAiAll = async () => {
+    if (!id) return;
+    setAiBusy(true);
+    try {
+      const result = await api.aiGenerate(id);
+      if (result.error) throw new ApiError(result.error, 400, result);
+      toast.push('success', result.cached ? 'AI suggestions loaded (cached)' : 'AI suggestions generated');
+      loadAiSuggestions();
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 402) {
+        toast.push('warning', e.message); // paywall
+      } else {
+        toast.push('error', e instanceof ApiError ? e.message : 'AI generation failed');
+      }
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const generateAiSlide = async (slideNumber: number) => {
+    if (!id) return;
+    setAiSlideBusy(true);
+    try {
+      const result = await api.aiGenerateSlide(id, slideNumber);
+      if (result.error) throw new ApiError(result.error, 400, result);
+      toast.push('success', result.cached ? 'Suggestion loaded (cached)' : `Suggestion generated for slide ${slideNumber}`);
+      loadAiSuggestions();
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 402) {
+        toast.push('warning', e.message); // paywall
+      } else {
+        toast.push('error', e instanceof ApiError ? e.message : 'AI generation failed');
+      }
+    } finally {
+      setAiSlideBusy(false);
+    }
+  };
+
+  const saveAiContext = async () => {
+    if (!id) return;
+    setContextBusy(true);
+    try {
+      const trimmed = contextDraft.trim();
+      const result = await api.aiSetContext(id, trimmed);
+      setAiContext(result.context ?? null);
+      setContextOpen(false);
+      toast.push('success', trimmed ? 'Context saved — it will guide every AI suggestion' : 'Context cleared');
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 402) {
+        toast.push('warning', e.message); // paywall
+      } else {
+        toast.push('error', e instanceof ApiError ? e.message : 'Failed to save context');
+      }
+    } finally {
+      setContextBusy(false);
+    }
+  };
+
+  // Approve: the backend applies the suggestion (title/summary + feedback_fields)
+  // through the same write path as a manual save. We then reload the slides so
+  // the draft reflects the approved state.
+  const approveSuggestion = async (s: AiSlideSuggestion) => {
+    if (!id) return;
+    try {
+      await api.aiApprove(id, s.slideId!, {});
+      toast.push('success', `Slide ${s.slideNumber} suggestion applied`);
+      loadAiSuggestions();
+      // Reload slides so the editor reflects the newly-applied title/summary.
+      api.listSlides(id).then(({ slides }) => {
+        const byNum = new Map(slides.map((sl) => [sl.slideNumber, sl]));
+        setDrafts((d) =>
+          d.map((dr, i) => {
+            const sl = byNum.get(i + 1);
+            if (!sl) return dr;
+            const r = sl.feedbackRule;
+            return {
+              ...dr,
+              title: sl.title ?? dr.title,
+              summary: sl.summary ?? dr.summary,
+              enabled: r?.enabled ?? dr.enabled,
+              required: r?.required ?? dr.required,
+              type: r?.feedbackType ?? dr.type,
+              question: r?.question ?? dr.question,
+              options: r?.options ?? dr.options,
+              allowResubmission: r?.allowResubmission ?? dr.allowResubmission,
+              saved: true,
+              dirty: false,
+            };
+          }),
+        );
+      }).catch(() => {});
+    } catch (e) {
+      toast.push('error', e instanceof ApiError ? e.message : 'Approve failed');
+    }
+  };
+
+  const rejectSuggestion = async (s: AiSlideSuggestion, comment?: string) => {
+    if (!id) return;
+    try {
+      await api.aiReject(id, s.slideId!, { comment });
+      toast.push('info', `Slide ${s.slideNumber} suggestion rejected`);
+      loadAiSuggestions();
+    } catch (e) {
+      toast.push('error', e instanceof ApiError ? e.message : 'Reject failed');
     }
   };
 
@@ -212,14 +361,29 @@ export default function ConfigureSlides() {
         title={presentation.title}
         description={`${presentation.slideCount} Slides · Configure content and feedback`}
         actions={
-          <Button colorPalette="green" onClick={() => setShowNamePrompt(true)}>
-            <Radar size={16} />
-            Create Session
-          </Button>
+          <Flex gap="2">
+            <Button
+              variant="outline"
+              colorPalette={aiContext ? 'green' : undefined}
+              onClick={() => {
+                setContextDraft(aiContext ?? '');
+                setContextOpen(true);
+              }}
+              disabled={!contextLoaded}
+              title={aiContext ? 'View / edit the AI context for this deck' : 'Set the AI context for this deck'}
+            >
+              <FilePen size={16} />
+              {aiContext ? 'Context' : 'Add Context'}
+            </Button>
+            <Button colorPalette="green" onClick={() => setShowNamePrompt(true)}>
+              <Radar size={16} />
+              Create Session
+            </Button>
+          </Flex>
         }
       />
 
-      <Grid templateColumns={{ base: '1fr', lg: '3fr 5fr 4fr' }} gap="4" alignItems="start">
+      <Grid templateColumns={{ base: '1fr', lg: '3fr 6fr 4fr' }} gap="4" alignItems="start">
         {/* LEFT — slide list */}
         <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="3" position={{ lg: 'sticky' }} top={{ lg: '16' }}>
           <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mb="2" px="1">
@@ -270,7 +434,8 @@ export default function ConfigureSlides() {
         </Box>
 
         {/* MIDDLE — editor */}
-        <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="5">
+        <VStack gap="4" align="stretch">
+          <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="5">
           <HStack gap="2" mb="4" pb="3" borderBottomWidth="1px" borderColor="border.subtle">
             <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
               Slide
@@ -407,7 +572,23 @@ export default function ConfigureSlides() {
               ) : null}
             </HStack>
           </VStack>
-        </Box>
+          </Box>
+
+          {/* AI suggestion panel — bottom of the config form, per active slide */}
+          <AISuggestionPanel
+            presentationId={id!}
+            suggestion={aiSuggestions.find((s) => s.slideNumber === active + 1 && s.status === 'pending')}
+            hasGenerated={aiSuggestions.some((s) => s.status === 'pending' || s.status === 'approved' || s.status === 'rejected')}
+            slideBusy={aiSlideBusy}
+            allBusy={aiBusy}
+            onGenerateSlide={() => generateAiSlide(active + 1)}
+            onGenerateAll={generateAiAll}
+            onRefresh={loadAiSuggestions}
+            onApprove={approveSuggestion}
+            onReject={rejectSuggestion}
+            toast={toast}
+          />
+        </VStack>
 
         {/* RIGHT — phone-shaped live preview */}
         <Box>
@@ -417,6 +598,7 @@ export default function ConfigureSlides() {
           <Box bg="bg.muted" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" p="6" display="flex" justifyContent="center">
             <Box
               w="320px"
+              h="640px"
               maxW="full"
               borderRadius="24px"
               borderWidth="1px"
@@ -424,21 +606,23 @@ export default function ConfigureSlides() {
               bg="bg.surface"
               overflow="hidden"
               boxShadow="lg"
+              display="flex"
+              flexDirection="column"
             >
               {/* Notch */}
-              <Flex justify="center" pt="2">
+              <Flex justify="center" pt="2" flexShrink="0">
                 <Box w="16" h="1" bg="border.emphasized" borderRadius="full" />
               </Flex>
 
-              <Box maxH="560px" overflowY="auto" p="4" display="flex" flexDirection="column" gap="4" pb="20">
-                <Flex align="center" justify="space-between" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" px="3" py="2">
+              <Box flex="1" minH="0" overflowY="auto" p="4" display="flex" flexDirection="column" gap="4" pb="20">
+                <Flex align="center" justify="space-between" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" px="3" py="2" flexShrink="0">
                   <Text color="fg.muted" fontSize="xs" fontFamily="mono" textTransform="uppercase" letterSpacing="wider">
                     Session: ---- 
                   </Text>
                   <ConnectionStatus state="connected" />
                 </Flex>
 
-                <Flex align="center" justify="space-between" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" px="3" py="2">
+                <Flex align="center" justify="space-between" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" px="3" py="2" flexShrink="0">
                   <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
                     Active Slide
                   </Text>
@@ -447,7 +631,7 @@ export default function ConfigureSlides() {
                   </Text>
                 </Flex>
 
-                <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface">
+                <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" flexShrink="0">
                   <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" px="4" py="2" borderBottomWidth="1px" borderColor="border.subtle">
                     Query Data
                   </Text>
@@ -479,9 +663,11 @@ export default function ConfigureSlides() {
                 </Box>
 
                 {previewRule.enabled ? (
-                  <FeedbackForm rule={previewRule} value="" onChange={() => {}} />
+                  <Box flexShrink="0">
+                    <FeedbackForm rule={previewRule} value="" onChange={() => {}} />
+                  </Box>
                 ) : (
-                  <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" p="6" textAlign="center">
+                  <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" p="6" textAlign="center" flexShrink="0">
                     <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
                       Feedback is disabled for this slide.
                     </Text>
@@ -489,12 +675,14 @@ export default function ConfigureSlides() {
                 )}
 
                 {previewDefaultQuestions.map((q) => (
-                  <DefaultQuestionForm key={q.id} question={q} value="" onChange={() => {}} />
+                  <Box key={q.id} flexShrink="0">
+                    <DefaultQuestionForm question={q} value="" onChange={() => {}} />
+                  </Box>
                 ))}
               </Box>
 
               {/* Bottom submit bar */}
-              <Box px="4" pt="3" pb="12px" borderTopWidth="1px" borderColor="border.subtle" bg="bg.panel">
+              <Box px="4" pt="3" pb="12px" borderTopWidth="1px" borderColor="border.subtle" bg="bg.panel" flexShrink="0">
                 <Button colorPalette="green" w="full" size="lg" disabled>
                   Submit Response
                 </Button>
@@ -654,6 +842,46 @@ export default function ConfigureSlides() {
                 </Button>
                 <Button type="submit" colorPalette="green">
                   Create Session
+                </Button>
+              </HStack>
+            </VStack>
+          </DialogBody>
+        </DialogContent>
+      </Dialog.Root>
+
+      {/* AI context dialog — "what am I building" prompt used for every suggestion */}
+      <Dialog.Root open={contextOpen} onOpenChange={(e) => e.open === false && setContextOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>AI Context</DialogTitle>
+            <DialogCloseTrigger />
+          </DialogHeader>
+          <DialogBody>
+            <VStack as="form" gap="4" align="stretch" onSubmit={(e) => { e.preventDefault(); saveAiContext(); }}>
+              <Field.Root>
+                <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                  What are you building? (guides every AI suggestion)
+                </FieldLabel>
+                <Textarea
+                  autoFocus
+                  value={contextDraft}
+                  onChange={(e) => setContextDraft(e.target.value)}
+                  placeholder="e.g. A Q3 board review for our Series B investors — emphasize traction, the new enterprise tier, and next quarter's hiring plan. Keep it confident and data-driven."
+                  minH="120px"
+                  resize="none"
+                  size="lg"
+                  maxLength={4000}
+                />
+              </Field.Root>
+              <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                This context is added to the prompt for every AI suggestion, so titles, summaries, and feedback questions stay on-message for the whole deck.
+              </Text>
+              <HStack justify="flex-end" gap="2">
+                <Button variant="outline" onClick={() => setContextOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" colorPalette="green" loading={contextBusy} disabled={contextDraft === (aiContext ?? '')}>
+                  {aiContext ? 'Save Changes' : 'Save Context'}
                 </Button>
               </HStack>
             </VStack>

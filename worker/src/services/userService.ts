@@ -10,6 +10,12 @@ export interface User {
   isSuperAdmin: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+  // AI Slide Config — Phase 0.
+  planStatus: 'free' | 'active' | 'past_due' | 'canceled';
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  planUpdatedAt: string | null;
+  trialPresentationUsedAt: string | null;
 }
 
 function mapUser(r: Record<string, unknown>): User {
@@ -22,6 +28,11 @@ function mapUser(r: Record<string, unknown>): User {
     isSuperAdmin: r.is_super_admin === 1 || r.is_super_admin === true,
     createdAt: r.created_at as string,
     lastLoginAt: (r.last_login_at as string) ?? null,
+    planStatus: (r.plan_status as User['planStatus']) ?? 'free',
+    stripeCustomerId: (r.stripe_customer_id as string) ?? null,
+    stripeSubscriptionId: (r.stripe_subscription_id as string) ?? null,
+    planUpdatedAt: (r.plan_updated_at as string) ?? null,
+    trialPresentationUsedAt: (r.trial_presentation_used_at as string) ?? null,
   };
 }
 
@@ -73,7 +84,6 @@ export async function upsertUserFromGoogle(
       now(),
     )
     .run();
-
   const row = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
   return mapUser(row!);
 }
@@ -149,4 +159,54 @@ export class UserNotFoundError extends Error {
     super(`User with email ${email} has not logged in yet. They must sign in once before they can be invited.`);
     this.name = 'UserNotFoundError';
   }
+}
+
+// AI Slide Config — Phase 0. Update the plan/billing fields on a user,
+// returning the refreshed user row (or null if the user doesn't exist).
+export async function updateUserPlan(
+  env: Env,
+  userId: string,
+  patch: {
+    planStatus?: User['planStatus'];
+    stripeCustomerId?: string | null;
+    stripeSubscriptionId?: string | null;
+    trialPresentationUsedAt?: string | null;
+  },
+): Promise<User | null> {
+  const existing = await getUser(env, userId);
+  if (!existing) return null;
+  await env.DB.prepare(
+    `UPDATE users SET
+       plan_status = ?,
+       stripe_customer_id = ?,
+       stripe_subscription_id = ?,
+       trial_presentation_used_at = ?,
+       plan_updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(
+      patch.planStatus ?? existing.planStatus,
+      patch.stripeCustomerId !== undefined ? patch.stripeCustomerId : existing.stripeCustomerId,
+      patch.stripeSubscriptionId !== undefined ? patch.stripeSubscriptionId : existing.stripeSubscriptionId,
+      patch.trialPresentationUsedAt !== undefined ? patch.trialPresentationUsedAt : existing.trialPresentationUsedAt,
+      now(),
+      userId,
+    )
+    .run();
+  return getUser(env, userId);
+}
+
+// AI Slide Config — Phase 0. Consume the owner's one-presentation free trial
+// if it hasn't been used yet. Returns true when this call consumed it (i.e.
+// the caller's AI request may proceed), false when it was already used.
+export async function consumeFreeTrial(env: Env, userId: string): Promise<boolean> {
+  const existing = await getUser(env, userId);
+  if (!existing) return false;
+  if (existing.trialPresentationUsedAt) return false;
+  const result = await env.DB.prepare(
+    `UPDATE users SET trial_presentation_used_at = ? WHERE id = ? AND trial_presentation_used_at IS NULL`,
+  )
+    .bind(now(), userId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
 }
