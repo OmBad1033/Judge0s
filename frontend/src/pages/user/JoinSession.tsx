@@ -1,8 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Box,
+  Button,
+  Field,
+  FieldLabel,
+  Flex,
+  Heading,
+  HStack,
+  Icon,
+  Input,
+  Link,
+  Spinner,
+  Text,
+  VStack,
+} from '@chakra-ui/react';
+import { ArrowRight, Edit, HelpCircle, RefreshCw, StopCircle } from 'lucide-react';
 import { api, ApiError } from '../../api';
-import Skeleton from '../../components/Skeleton';
 import ConnectionStatus from '../../components/ConnectionStatus';
 
 // Mobile-first participant join. Two entry points:
@@ -19,7 +35,6 @@ export default function JoinSession() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // FR-1 — when a code is present, look up session info to render the right state.
   const trimmedCode = code.trim().toUpperCase();
   const queryClient = useQueryClient();
   const infoQuery = useQuery({
@@ -30,10 +45,8 @@ export default function JoinSession() {
     staleTime: 30_000,
   });
 
-  // Helper to clear the join-info lookup when the user starts over.
   const resetCode = () => {
     setCode('');
-    // Removing the cached entry forces a refetch the next time a code is entered.
     queryClient.removeQueries({ queryKey: ['join-info'] });
     navigate('/join', { replace: true });
   };
@@ -48,10 +61,7 @@ export default function JoinSession() {
     setBusy(true);
     try {
       const r = await api.joinSession(trimmedCode, name, email);
-      localStorage.setItem(
-        'participant',
-        JSON.stringify({ participantId: r.participantId, code: r.sessionCode }),
-      );
+      localStorage.setItem('participant', JSON.stringify({ participantId: r.participantId, code: r.sessionCode }));
       navigate(`/session/${r.sessionCode}`);
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : 'Join failed';
@@ -73,198 +83,212 @@ export default function JoinSession() {
   const notFound = infoQuery.error instanceof ApiError && infoQuery.error.status === 404;
 
   return (
-    <div className="dot-grid min-h-screen text-on-surface font-body flex flex-col">
+    <Box minH="100dvh" bg="bg.canvas" color="fg" display="flex" flexDirection="column">
       {/* Top status strip */}
-      <div className="border-b border-border bg-surface">
-        <div className="max-w-md mx-auto px-4 h-12 flex items-center justify-between">
-          <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-            <span className="material-symbols-outlined text-[14px] align-middle mr-1">grid_view</span>
-            Participant_Node
-          </span>
-          <ConnectionStatus state="connected" size="sm" showLabel={false} />
-        </div>
-      </div>
+      <Box borderBottomWidth="1px" borderColor="border.subtle" bg="bg.panel">
+        <Flex maxW="md" mx="auto" h="12" px="4" align="center" justify="space-between">
+          <HStack gap="2" color="fg.muted">
+            <Icon boxSize="4">
+              <GridIcon />
+            </Icon>
+            <Text fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+              Participant Node
+            </Text>
+          </HStack>
+          <ConnectionStatus state="connected" showLabel={false} />
+        </Flex>
+      </Box>
 
-      <main className="flex-1 flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-md">
-          {/* Deep-link outcome: session ended */}
+      <Flex flex="1" align="center" justify="center" px="4" py="8">
+        <Box w="full" maxW="md">
           {sessionEnded && (
-            <div className="term-card p-6 flex flex-col gap-4 text-center">
-              <span className="material-symbols-outlined text-4xl text-danger mx-auto">stop_circle</span>
-              <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em]">Session_Ended</h2>
-              <p className="font-body text-body text-on-surface-variant">
-                <span className="font-mono font-semibold">{trimmedCode}</span> has already ended. Ask the
-                host to start a new session.
-              </p>
-              <button
-                onClick={resetCode}
-                className="term-button-secondary w-full !py-3"
-              >
-                <span className="material-symbols-outlined text-[18px]">refresh</span>
-                <span>Try_Another_Code</span>
-              </button>
-            </div>
+            <Card>
+              <VStack gap="4" textAlign="center">
+                <Icon color="red.solid" boxSize="10">
+                  <StopCircle />
+                </Icon>
+                <Heading size="lg" textTransform="uppercase" letterSpacing="tight">
+                  Session Ended
+                </Heading>
+                <Text color="fg.muted" fontSize="sm">
+                  <strong>{trimmedCode}</strong> has already ended. Ask the host to start a new session.
+                </Text>
+                <Button variant="outline" w="full" onClick={resetCode}>
+                  <RefreshCw size={16} />
+                  Try Another Code
+                </Button>
+              </VStack>
+            </Card>
           )}
 
-          {/* Deep-link outcome: code not found */}
           {notFound && (
-            <div className="term-card p-6 flex flex-col gap-4 text-center">
-              <span className="material-symbols-outlined text-4xl text-warning mx-auto">help</span>
-              <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em]">Code_Not_Found</h2>
-              <p className="font-body text-body text-on-surface-variant">
-                We couldn't find a session with the code{' '}
-                <span className="font-mono font-semibold">{trimmedCode}</span>. Double-check the code with
-                the host.
-              </p>
-              <button
-                onClick={resetCode}
-                className="term-button-secondary w-full !py-3"
-              >
-                <span className="material-symbols-outlined text-[18px]">edit</span>
-                <span>Enter_Code_Manually</span>
-              </button>
-            </div>
+            <Card>
+              <VStack gap="4" textAlign="center">
+                <Icon color="orange.solid" boxSize="10">
+                  <HelpCircle />
+                </Icon>
+                <Heading size="lg" textTransform="uppercase" letterSpacing="tight">
+                  Code Not Found
+                </Heading>
+                <Text color="fg.muted" fontSize="sm">
+                  We couldn&apos;t find a session with the code <strong>{trimmedCode}</strong>. Double-check
+                  the code with the host.
+                </Text>
+                <Button variant="outline" w="full" onClick={resetCode}>
+                  <Edit size={16} />
+                  Enter Code Manually
+                </Button>
+              </VStack>
+            </Card>
           )}
 
-          {/* Session is in draft — show a hint above the form */}
           {sessionDraft && (
-            <div className="term-card border-warning bg-[#fef3c7] px-3 py-2 mb-3 flex items-center gap-2 text-warning">
-              <span className="material-symbols-outlined text-[18px]">hourglass_top</span>
-              <span className="font-mono text-micro uppercase tracking-[0.15em]">
-                Session is set up but the host hasn't started yet. You can join now and wait.
-              </span>
-            </div>
+            <Alert.Root status="warning" mb="3" borderRadius="lg" size="sm">
+              <Alert.Indicator />
+              <Alert.Title>
+                Session is set up but the host hasn&apos;t started yet. You can join now and wait.
+              </Alert.Title>
+            </Alert.Root>
           )}
 
-          {/* Session is live — show a friendly indicator */}
           {sessionLive && (
-            <div className="term-card border-primary bg-primary-dim px-3 py-2 mb-3 flex items-center gap-2 text-primary">
-              <span className="w-1.5 h-1.5 bg-primary rounded-full pulse-emerald inline-block" />
-              <span className="font-mono text-micro uppercase tracking-[0.15em]">
-                Session is live. Enter your details to join.
-              </span>
-            </div>
+            <Alert.Root status="success" mb="3" borderRadius="lg" size="sm">
+              <Alert.Indicator />
+              <Alert.Title>Session is live. Enter your details to join.</Alert.Title>
+            </Alert.Root>
           )}
 
-          {/* Main join form (always rendered unless session ended / not found) */}
           {!sessionEnded && !notFound && (
-            <div className="term-card">
-              <div className="border-b border-border px-6 py-5 text-center">
-                <div className="font-mono text-display-sm uppercase tracking-[0.15em] text-on-surface">
+            <Card>
+              <Box px="6" py="5" textAlign="center" borderBottomWidth="1px" borderColor="border.subtle">
+                <Heading size="md" textTransform="uppercase" letterSpacing="wide">
                   Judge_OS
-                </div>
-                <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-                  [Participant_Access_Protocol]
-                </div>
-              </div>
+                </Heading>
+                <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mt="1">
+                  Participant Access
+                </Text>
+              </Box>
 
-              <form className="px-6 py-6 flex flex-col gap-5" onSubmit={submit} noValidate>
-                <div>
-                  <label className="term-label block mb-1.5" htmlFor="participantName">
-                    Participant_Name
-                  </label>
-                  <input
-                    id="participantName"
-                    className="term-input px-3 py-2.5 min-h-[44px]"
+              <VStack as="form" px="6" py="6" gap="5" align="stretch" onSubmit={submit}>
+                <Field.Root required>
+                  <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                    Participant Name
+                  </FieldLabel>
+                  <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter your designated identifier"
+                    placeholder="Enter your name"
                     autoComplete="name"
-                    required
+                    size="lg"
                   />
-                </div>
+                </Field.Root>
 
-                <div>
-                  <label className="term-label block mb-1.5" htmlFor="participantEmail">
-                    Email_Address
-                  </label>
-                  <input
-                    id="participantEmail"
+                <Field.Root required>
+                  <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                    Email Address
+                  </FieldLabel>
+                  <Input
                     type="email"
-                    className="term-input px-3 py-2.5 min-h-[44px]"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@company.com"
                     autoComplete="email"
                     inputMode="email"
-                    required
+                    size="lg"
                   />
-                </div>
+                </Field.Root>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="term-label" htmlFor="sessionCode">
-                      Session_Code
-                    </label>
-                    <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
+                <Field.Root required>
+                  <Flex justify="space-between" align="center">
+                    <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                      Session Code
+                    </FieldLabel>
+                    <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
                       6 Characters
-                    </span>
-                  </div>
-                  <input
-                    id="sessionCode"
+                    </Text>
+                  </Flex>
+                  <Input
                     autoComplete="off"
-                    className="term-input px-3 py-3 text-center font-mono text-h1 uppercase tracking-[0.3em] min-h-[48px]"
-                    maxLength={6}
                     value={code}
                     onChange={(e) => {
                       setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
-                      // Removing the cached join-info entry forces a refetch for the new code.
                       queryClient.removeQueries({ queryKey: ['join-info'] });
                     }}
-                    placeholder="------"
+                    placeholder="······"
                     inputMode="text"
                     autoCapitalize="characters"
-                    required
+                    maxLength={6}
+                    size="lg"
+                    textAlign="center"
+                    fontFamily="mono"
+                    fontSize="xl"
+                    letterSpacing="0.3em"
                   />
                   {infoQuery.isLoading && trimmedCode.length >= 4 && (
-                    <div className="mt-2">
-                      <Skeleton rows={1} />
-                    </div>
+                    <HStack gap="2" mt="2" color="fg.muted">
+                      <Spinner size="xs" />
+                      <Text fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                        Checking code…
+                      </Text>
+                    </HStack>
                   )}
-                </div>
+                </Field.Root>
 
                 {err && (
-                  <div className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-[0.15em] text-danger">
-                    <span className="material-symbols-outlined text-[14px] fill">error</span>
-                    <span>{err}</span>
-                  </div>
+                  <Text color="red.solid" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                    {err}
+                  </Text>
                 )}
 
-                <button
+                <Button
                   type="submit"
+                  colorPalette="green"
+                  size="lg"
+                  mt="2"
                   disabled={busy || !trimmedCode || !name || !email}
-                  className="term-button-primary w-full !py-3.5 mt-2 min-h-[48px]"
                 >
-                  {busy ? (
-                    <>
-                      <span>{'>'}</span>
-                      Authenticating
-                      <span className="cursor-blink">_</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>{'>'}</span>
-                      Join_Session
-                      <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                    </>
-                  )}
-                </button>
-              </form>
+                  {busy ? 'Joining…' : 'Join Session'}
+                  <ArrowRight size={18} />
+                </Button>
+              </VStack>
 
-              <div className="border-t border-border px-6 py-3 flex items-center justify-between font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                <span>V2.0.4 - Stable</span>
-                <span>Secure Connection</span>
-              </div>
-            </div>
+              <Flex justify="space-between" px="6" py="3" borderTopWidth="1px" borderColor="border.subtle" color="fg.muted">
+                <Text fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                  V2.0.4 — Stable
+                </Text>
+                <Text fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                  Secure Connection
+                </Text>
+              </Flex>
+            </Card>
           )}
 
-          <div className="text-center mt-4 font-mono text-micro uppercase tracking-[0.18em] text-muted">
-            <a href="/" className="hover:text-on-surface">
-              {'< Back to Landing'}
-            </a>
-          </div>
-        </div>
-      </main>
-    </div>
+          <Box textAlign="center" mt="4">
+            <Link href="/" color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" _hover={{ color: 'fg' }}>
+              &lt; Back to Landing
+            </Link>
+          </Box>
+        </Box>
+      </Flex>
+    </Box>
+  );
+}
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" p="6">
+      {children}
+    </Box>
+  );
+}
+
+function GridIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="7" height="7" x="3" y="3" rx="1" />
+      <rect width="7" height="7" x="14" y="3" rx="1" />
+      <rect width="7" height="7" x="14" y="14" rx="1" />
+      <rect width="7" height="7" x="3" y="14" rx="1" />
+    </svg>
   );
 }

@@ -1,12 +1,40 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate, NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import {
+  Avatar,
+  Box,
+  Button,
+  Flex,
+  HStack,
+  Heading,
+  IconButton,
+  Separator,
+  Spinner,
+  Text,
+  Tooltip,
+} from '@chakra-ui/react';
+import {
+  BarChart2,
+  Bell,
+  LayoutGrid,
+  LogOut,
+  PanelLeft,
+  PanelLeftClose,
+  Plus,
+  Sparkles,
+} from 'lucide-react';
 import { api } from '../api';
+import * as Sidebar from '../components/ui/sidebar/sidebar';
+import { useSidebar } from '../components/ui/sidebar/sidebar.context';
 
-// Admin shell with a top dock (SaaS-style): brand + signed-in user's name on
-// the left, primary nav (Library, New Presentation) in the middle, logout on
-// the right. Content renders below the bar.
-export default function AdminShell({ children }: { children: ReactNode }) {
+const NAV = [
+  { to: '/admin/presentations', label: 'Library', icon: <LayoutGrid size={18} />, end: true },
+  { to: '/admin/presentations?new=1', label: 'New Presentation', icon: <Plus size={18} />, end: false },
+];
+
+export default function AdminShell() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [state, setState] = useState<'loading' | 'ok' | 'unauth'>('loading');
   const [userName, setUserName] = useState<string | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
@@ -33,134 +61,276 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
   if (state !== 'ok') {
     return (
-      <div className="min-h-screen flex items-center justify-center dot-grid text-on-surface font-mono">
-        <div className="flex items-center gap-2 text-label uppercase tracking-[0.15em]">
-          <span className="text-primary">{'>'}</span>
-          <span>Authenticating</span>
-          <span className="cursor-blink">_</span>
-        </div>
-      </div>
+      <Box h="100dvh" display="grid" placeItems="center">
+        <HStack gap="3" color="fg.muted">
+          <Spinner size="sm" />
+          <Text fontSize="sm" fontWeight="medium">
+            Authenticating…
+          </Text>
+        </HStack>
+      </Box>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-on-surface font-body flex flex-col">
-      <header className="sticky top-0 z-50 bg-surface border-b border-border">
-        <div className="h-14 px-4 md:px-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-          {/* Brand (top-left) */}
-          <NavLink
-            to="/admin/presentations"
-            className="justify-self-start font-mono text-label uppercase tracking-[0.15em] shrink-0 hover:text-primary transition"
-          >
-            Judge_OS<span className="text-muted">:v1.0</span>
-          </NavLink>
-
-          {/* Primary nav (center) */}
-          <nav className="flex items-center gap-1 md:gap-2 justify-self-center">
-            <TopBarLink to="/admin/presentations" icon="library_books" label="Library" exact />
-            <TopBarLink to="/admin/presentations" icon="add_circle" label="New Presentation" />
-            <span
-              aria-disabled="true"
-              title="Coming soon"
-              className="group flex items-center gap-2 px-3 py-2 rounded font-mono text-label uppercase tracking-[0.15em] text-muted/40 select-none cursor-not-allowed"
-            >
-              <span className="material-symbols-outlined text-[18px] transition-transform duration-300 group-hover:rotate-12">
-                gavel
-              </span>
-              <span>Judge</span>
-            </span>
-          </nav>
-
-          {/* User identity + logout (top-right) */}
-          <div className="flex items-center gap-3 justify-self-end shrink-0">
-            <span className="hidden sm:flex items-center gap-2 min-w-0 text-muted">
-              {userAvatar ? (
-                <img
-                  src={userAvatar}
-                  alt=""
-                  className="w-6 h-6 rounded-full shrink-0"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <span className="w-6 h-6 rounded-full bg-primary-dim text-primary flex items-center justify-center font-mono text-micro uppercase shrink-0">
-                  {(userName ?? 'A').slice(0, 1)}
-                </span>
-              )}
-              <span className="truncate font-mono text-label uppercase tracking-[0.15em]">
-                {userName ?? 'Admin'}
-              </span>
-            </span>
-            <button
-              onClick={logout}
-              className="w-9 h-9 inline-flex items-center justify-center text-muted hover:text-on-surface"
-              aria-label="Logout"
-            >
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-            </button>
-          </div>
-        </div>
-        <div className="h-px scan-sweep" />
-      </header>
-
-      <main className="flex-1 min-w-0 px-4 md:px-6 py-6 max-w-[1280px] w-full mx-auto">{children}</main>
-
-      <footer className="border-t border-border bg-surface">
-        <div className="max-w-[1280px] mx-auto px-4 md:px-6 h-8 flex items-center justify-between font-mono text-micro uppercase tracking-[0.18em] text-muted">
-          <span>Judge_OS — Internal Feedback System</span>
-          <span className="hidden md:inline">Sys.Health: Optimal &nbsp;·&nbsp; Latency: 12ms</span>
-        </div>
-      </footer>
-    </div>
+    <Sidebar.Provider defaultOpen={true} mode="collapsible">
+      <Shell userName={userName} userAvatar={userAvatar} onLogout={logout}>
+        <Outlet />
+      </Shell>
+    </Sidebar.Provider>
   );
 }
 
-function TopBarLink({
-  to,
-  icon,
-  label,
-  exact,
+function Shell({
+  userName,
+  userAvatar,
+  onLogout,
+  children,
 }: {
-  to: string;
-  icon: string;
-  label: string;
-  exact?: boolean;
+  userName: string | null;
+  userAvatar: string | null;
+  onLogout: () => void;
+  children: React.ReactNode;
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const sidebar = useSidebar();
+  const open = sidebar.open;
+
+  return (
+    <Box minH="100dvh" w="full">
+      {/* Fixed sidebar — never affects document flow. */}
+      <Sidebar.Root
+        width="264px"
+        minWidth="264px"
+        position="fixed"
+        insetY="0"
+        left="0"
+        zIndex="30"
+        display="flex"
+        flexDirection="column"
+        bg="bg.surface"
+        borderRightWidth="1px"
+        borderColor="border.subtle"
+        transform={open ? 'translateX(0)' : 'translateX(-100%)'}
+        transition="transform 0.2s ease"
+      >
+        <Sidebar.Header>
+          <Flex align="center" justify="space-between" gap="1" minH="14" pl="2" pr="1">
+            <HStack gap="2.5" minW="0">
+              <Box
+                w="8"
+                h="8"
+                borderRadius="lg"
+                bg="accent.solid"
+                color="accent.fg"
+                display="grid"
+                placeItems="center"
+                fontSize="md"
+                fontWeight="bold"
+                flexShrink="0"
+              >
+                J
+              </Box>
+              <Box lineHeight="1.1" minW="0">
+                <Text fontWeight="bold" fontSize="sm" letterSpacing="wide" textTransform="uppercase" truncate>
+                  Judge_OS
+                </Text>
+                <Text color="fg.muted" fontSize="xs">
+                  Live Feedback Protocol
+                </Text>
+              </Box>
+            </HStack>
+            <IconButton
+              aria-label="Toggle sidebar"
+              variant="ghost"
+              size="sm"
+              color="fg.muted"
+              flexShrink="0"
+              onClick={() => sidebar.toggle()}
+            >
+              <PanelLeftClose size={18} />
+            </IconButton>
+          </Flex>
+        </Sidebar.Header>
+
+        <Sidebar.Body>
+          <Sidebar.Group>
+            <Sidebar.GroupContent>
+              {NAV.map((item) => {
+                const active = item.end
+                  ? location.pathname === item.to
+                  : location.pathname.startsWith(item.to.split('?')[0]);
+                return (
+                  <Sidebar.NavItem key={item.to} variant="muted" size="md">
+                    <Sidebar.NavButton onClick={() => navigate(item.to)} active={active}>
+                      {item.icon}
+                      {item.label}
+                    </Sidebar.NavButton>
+                  </Sidebar.NavItem>
+                );
+              })}
+            </Sidebar.GroupContent>
+          </Sidebar.Group>
+
+          <Separator my="4" />
+
+          <Sidebar.Group>
+            <Sidebar.GroupTitle>Reports</Sidebar.GroupTitle>
+            <Sidebar.GroupContent>
+              <Sidebar.NavItem variant="muted" size="md">
+                <Sidebar.NavButton onClick={() => navigate('/admin/presentations')}>
+                  <BarChart2 size={18} />
+                  Analytics
+                </Sidebar.NavButton>
+              </Sidebar.NavItem>
+            </Sidebar.GroupContent>
+          </Sidebar.Group>
+        </Sidebar.Body>
+
+        <Sidebar.Footer>
+          <Flex align="center" justify="space-between" gap="2" px="2" py="3">
+            <HStack gap="2.5" minW="0">
+              <Avatar.Root size="sm">
+                <Avatar.Fallback name={userName ?? 'Admin'} />
+                {userAvatar ? <Avatar.Image src={userAvatar} referrerPolicy="no-referrer" /> : null}
+              </Avatar.Root>
+              <Box lineHeight="1.1" minW="0">
+                <Text fontSize="sm" fontWeight="medium" truncate>
+                  {userName ?? 'Admin'}
+                </Text>
+                <Text color="fg.muted" fontSize="xs">
+                  Administrator
+                </Text>
+              </Box>
+            </HStack>
+            <IconButton aria-label="Logout" variant="ghost" size="sm" color="fg.muted" onClick={onLogout}>
+              <LogOut size={16} />
+            </IconButton>
+          </Flex>
+        </Sidebar.Footer>
+      </Sidebar.Root>
+
+      {/* Content — offset by sidebar width when open. */}
+      <Box
+        minH="100dvh"
+        display="flex"
+        flexDirection="column"
+        marginLeft={{ base: '0', md: open ? '264px' : '0' }}
+        transition="margin-left 0.2s ease"
+      >
+        <TopBar userName={userName} userAvatar={userAvatar} onLogout={onLogout} />
+
+        <Box as="main" flex="1" minW="0" px={{ base: '4', md: '6' }} py="6" maxW="1280px" w="full" mx="auto">
+          {children}
+        </Box>
+      </Box>
+
+      {/* Expand button — only visible when the sidebar is collapsed so it can
+          always be reopened. Sits at the top-left corner of the content. */}
+      {!open && (
+        <IconButton
+          aria-label="Open sidebar"
+          variant="outline"
+          size="sm"
+          position="fixed"
+          top="3"
+          left="3"
+          zIndex="40"
+          bg="bg.panel"
+          boxShadow="sm"
+          onClick={() => sidebar.toggle()}
+        >
+          <PanelLeft size={18} />
+        </IconButton>
+      )}
+    </Box>
+  );
+}
+
+function TopBar({
+  userName,
+  userAvatar,
+  onLogout,
+}: {
+  userName: string | null;
+  userAvatar: string | null;
+  onLogout: () => void;
 }) {
   return (
-    <NavLink
-      to={to}
-      end={exact}
-      className={({ isActive }) =>
-        `group relative flex items-center gap-2 px-3 py-2 font-mono text-label uppercase tracking-[0.15em] transition ${
-          isActive
-            ? 'text-primary'
-            : 'text-muted hover:text-on-surface'
-        }`
-      }
+    <Flex
+      as="header"
+      position="sticky"
+      top="0"
+      zIndex="20"
+      h="14"
+      align="center"
+      justify="space-between"
+      borderBottomWidth="1px"
+      borderColor="border.subtle"
+      bg="bg.panel/90"
+      backdropFilter="blur(8px)"
     >
-      {({ isActive }) => (
-        <>
-          <span
-            className={`material-symbols-outlined text-[18px] transition-all duration-300 ${
-              isActive
-                ? 'fill scale-110 -translate-x-0.5'
-                : 'group-hover:-translate-x-0.5 group-hover:scale-110'
-            }`}
-          >
-            {icon}
-          </span>
-          <span className="relative">
-            {label}
-            <span
-              aria-hidden="true"
-              className={`absolute -bottom-1 left-0 h-px bg-primary transition-all duration-300 ease-out ${
-                isActive
-                  ? 'w-full opacity-100'
-                  : 'w-0 opacity-0 group-hover:w-full group-hover:opacity-60'
-              }`}
-            />
-          </span>
-        </>
-      )}
-    </NavLink>
+      {/* Spacer reserved for the toggle button on mobile (where it would
+          otherwise overlap the header content). */}
+      <Box w="12" display={{ base: 'block', md: 'none' }} flexShrink="0" />
+
+      <HStack gap="2" display={{ base: 'flex', md: 'none' }} flex="1">
+        <Heading size="sm" textTransform="uppercase" letterSpacing="wide">
+          Judge_OS
+        </Heading>
+      </HStack>
+
+      <HStack gap="2" ml="auto" pr={{ base: '4', md: '6' }}>
+        <Tooltip.Root>
+          <Tooltip.Trigger asChild>
+            <IconButton aria-label="Notifications" variant="ghost" color="fg.muted" disabled>
+              <Bell size={18} />
+            </IconButton>
+          </Tooltip.Trigger>
+          <Tooltip.Positioner>
+            <Tooltip.Content>Coming soon</Tooltip.Content>
+          </Tooltip.Positioner>
+        </Tooltip.Root>
+        <Tooltip.Root>
+          <Tooltip.Trigger asChild>
+            <IconButton aria-label="AI assistant" variant="ghost" color="fg.muted" disabled>
+              <Sparkles size={18} />
+            </IconButton>
+          </Tooltip.Trigger>
+          <Tooltip.Positioner>
+            <Tooltip.Content>Coming soon</Tooltip.Content>
+          </Tooltip.Positioner>
+        </Tooltip.Root>
+
+        <Separator orientation="vertical" h="6" />
+
+        <HStack gap="2">
+          <Avatar.Root size="sm">
+            <Avatar.Fallback name={userName ?? 'Admin'} />
+            {userAvatar ? <Avatar.Image src={userAvatar} referrerPolicy="no-referrer" /> : null}
+          </Avatar.Root>
+          <Box display={{ base: 'none', md: 'block' }} lineHeight="1.1">
+            <Text fontSize="sm" fontWeight="medium">
+              {userName ?? 'Admin'}
+            </Text>
+            <Text color="fg.muted" fontSize="xs">
+              Administrator
+            </Text>
+          </Box>
+        </HStack>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          color="fg.muted"
+          onClick={onLogout}
+          display={{ base: 'none', md: 'inline-flex' }}
+        >
+          <LogOut size={16} />
+          Logout
+        </Button>
+      </HStack>
+    </Flex>
   );
 }

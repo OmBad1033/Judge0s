@@ -1,27 +1,40 @@
-import { useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRef, useState, useEffect, type FormEvent } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogBody,
+  DialogCloseTrigger,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Field,
+  FieldLabel,
+  Flex,
+  Grid,
+  Heading,
+  HStack,
+  Icon,
+  Input,
+  SimpleGrid,
+  Text,
+  VStack,
+} from '@chakra-ui/react';
+import { ArrowRight, FileText, Plus, UploadCloud } from 'lucide-react';
 import { api, ApiError } from '../../api';
 import type { PresentationSummary } from '../../types';
 import { useToast } from '../../lib/toast';
-import Skeleton from '../../components/Skeleton';
-
-function StatusPill({ status }: { status?: string }) {
-  if (!status) return <span className="status-pill status-pill-draft">[No_Session]</span>;
-  if (status === 'live') {
-    return (
-      <span className="status-pill status-pill-live">
-        <span className="w-1.5 h-1.5 bg-primary rounded-full pulse-emerald inline-block" />
-        Live
-      </span>
-    );
-  }
-  if (status === 'ended') return <span className="status-pill status-pill-ended">Ended</span>;
-  return <span className="status-pill status-pill-draft">Draft</span>;
-}
+import { PageHeader } from '../../components/ui/page-header';
+import { EmptyStateCard } from '../../components/ui/empty-state';
+import { StatusBadge } from '../../components/ui/status-badge';
+import { SkeletonGrid } from '../../components/ui/skeleton';
 
 export default function UploadPresentation() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -30,6 +43,12 @@ export default function UploadPresentation() {
   const [file, setFile] = useState<File | null>(null);
   const [uploadErr, setUploadErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Deep link from the sidebar "New Presentation" item (?new=1) opens the
+  // upload dialog on arrival.
+  useEffect(() => {
+    if (searchParams.get('new') === '1') setOpen(true);
+  }, [searchParams]);
 
   const isPdf = file ? /\.pdf$/i.test(file.name) : false;
 
@@ -69,117 +88,117 @@ export default function UploadPresentation() {
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4 mb-4">
-        <div>
-          <div className="term-label">[Library]</div>
-          <h1 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mt-1">
-            Presentation Library
-          </h1>
-          <p className="font-body text-body text-on-surface-variant mt-1">
-            Upload, configure, and run live feedback sessions. PDFs are auto-extracted.
-          </p>
-        </div>
-        <button onClick={() => setOpen(true)} className="term-button-primary min-h-[44px]">
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          Event
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Library"
+        title="Presentation Library"
+        description="Upload, configure, and run live feedback sessions. PDFs are auto-extracted."
+        actions={
+          <Button colorPalette="green" onClick={() => setOpen(true)}>
+            <Plus size={16} />
+            Upload
+          </Button>
+        }
+      />
 
       {listQ.isLoading ? (
-        <Skeleton variant="list" rows={3} />
+        <SkeletonGrid />
       ) : listQ.isError ? (
-        <div className="term-card border-danger bg-[#fef2f2] px-4 py-3 font-mono text-micro uppercase tracking-[0.15em] text-danger">
-          {'>'} Failed to load presentations
-        </div>
+        <Box color="red.solid" fontSize="sm">
+          Failed to load presentations
+        </Box>
       ) : (listQ.data ?? []).length === 0 ? (
-        <EmptyState onCreate={() => setOpen(true)} />
+        <EmptyStateCard
+          icon={<Icon color="fg.muted" boxSize="10"><FileText /></Icon>}
+          title="No presentations yet"
+          description="Upload your first .pptx or .pdf to begin a feedback session."
+        >
+          <Button colorPalette="green" onClick={() => setOpen(true)}>
+            <Plus size={16} />
+            Upload
+          </Button>
+        </EmptyStateCard>
       ) : (
         <PresentationGrid items={listQ.data!} />
       )}
 
-      {open && (
-        <UploadModal
-          title={title}
-          slideCount={slideCount}
-          file={file}
-          isPdf={isPdf}
-          busy={createMut.isPending}
-          err={uploadErr}
-          fileRef={fileRef}
-          onTitle={setTitle}
-          onSlideCount={setSlideCount}
-          onFile={setFile}
-          onClose={() => {
-            if (createMut.isPending) return;
-            setOpen(false);
-            setUploadErr('');
-          }}
-          onSubmit={submit}
-        />
-      )}
+      <UploadModal
+        open={open}
+        title={title}
+        slideCount={slideCount}
+        file={file}
+        isPdf={isPdf}
+        busy={createMut.isPending}
+        err={uploadErr}
+        fileRef={fileRef}
+        onTitle={setTitle}
+        onSlideCount={setSlideCount}
+        onFile={setFile}
+        onClose={() => {
+          if (createMut.isPending) return;
+          setOpen(false);
+          setUploadErr('');
+        }}
+        onSubmit={submit}
+      />
     </>
-  );
-}
-
-function EmptyState({ onCreate }: { onCreate: () => void }) {
-  return (
-    <div className="text-center py-16 term-card">
-      <div className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-        {'>'} No_Records_Found
-      </div>
-      <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mt-2">
-        No presentations yet
-      </h2>
-      <p className="font-body text-body text-on-surface-variant mt-2 mb-6">
-        Upload your first .pptx or .pdf to begin a feedback session.
-      </p>
-      <button onClick={onCreate} className="term-button-primary mx-auto min-h-[44px]">
-        <span className="material-symbols-outlined text-[18px]">add</span>
-          Event
-      </button>
-    </div>
   );
 }
 
 function PresentationGrid({ items }: { items: PresentationSummary[] }) {
   const navigate = useNavigate();
   return (
-    <div className="grid gap-px sm:grid-cols-2 lg:grid-cols-3 bg-border border border-border">
+    <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} gap="4">
       {items.map((p) => (
-        <button
+        <Box
           key={p.id}
+          as="button"
           onClick={() => navigate(`/admin/presentations/${p.id}/sessions`)}
-          className="bg-surface p-5 flex flex-col text-left hover:bg-surface-1 transition min-h-[160px] group"
+          borderWidth="1px"
+          borderColor="border.subtle"
+          borderRadius="lg"
+          bg="bg.surface"
+          p="5"
+          textAlign="left"
+          transition="all 0.15s"
+          _hover={{ borderColor: 'border.emphasized', transform: 'translateY(-2px)', boxShadow: 'md' }}
+          _focusVisible={{ outline: '2px solid', outlineColor: 'border.emphasized' }}
+          cursor="pointer"
+          display="flex"
+          flexDirection="column"
+          minH="180px"
         >
-          <div className="flex items-start justify-between gap-2 mb-3">
-            <span className="font-mono text-micro uppercase tracking-[0.18em] text-primary">[File]</span>
-            <StatusPill status={p.latestSession?.status} />
-          </div>
-          <h3 className="font-mono text-h1 text-on-surface mb-1 truncate group-hover:text-primary transition">
+          <Flex align="flex-start" justify="space-between" gap="2" mb="3">
+            <Text color="green.solid" fontSize="xs" fontFamily="mono" textTransform="uppercase" letterSpacing="wider">
+              [File]
+            </Text>
+            {p.latestSession && <StatusBadge status={p.latestSession.status} />}
+          </Flex>
+          <Heading size="sm" mb="1" truncate>
             {p.title}
-          </h3>
-          <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mb-4">
-            {p.slideCount} Slides &nbsp;·&nbsp; {p.configuredSlides} Configured
-          </p>
-          <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mb-4 truncate">
+          </Heading>
+          <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" mb="1">
+            {p.slideCount} Slides · {p.configuredSlides} Configured
+          </Text>
+          <Text color="fg.muted" fontSize="xs" truncate mb="1">
             Src: {p.originalFilename}
-          </p>
+          </Text>
           {p.latestSession && (
-            <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mb-4 truncate">
+            <Text color="fg.muted" fontSize="xs" truncate mb="1">
               Latest: {p.latestSession.sessionCode}
-            </p>
+            </Text>
           )}
-          <div className="mt-auto flex items-center justify-between font-mono text-micro uppercase tracking-[0.18em] text-muted group-hover:text-primary transition">
-            <span>View_Sessions</span>
-            <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-          </div>
-        </button>
+          <HStack gap="1" mt="auto" pt="4" color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+            <span>View Sessions</span>
+            <ArrowRight size={14} />
+          </HStack>
+        </Box>
       ))}
-    </div>
+    </SimpleGrid>
   );
 }
 
 function UploadModal({
+  open,
   title,
   slideCount,
   file,
@@ -193,6 +212,7 @@ function UploadModal({
   onClose,
   onSubmit,
 }: {
+  open: boolean;
   title: string;
   slideCount: string;
   file: File | null;
@@ -208,110 +228,83 @@ function UploadModal({
 }) {
   const showSlideCount = file !== null && !isPdf;
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/30 backdrop-blur-sm"
-      onClick={() => !busy && onClose()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="upload-title"
-    >
-      <div className="term-card w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center border-b border-border px-5 py-4">
-          <div>
-            <div className="term-label">[Event]</div>
-            <h2 id="upload-title" className="font-mono text-h1 text-on-surface mt-1">
-              Upload Presentation
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-muted hover:text-on-surface min-w-[44px] min-h-[44px]"
-            disabled={busy}
-            aria-label="Close"
-          >
-            <span className="material-symbols-outlined text-[18px]">close</span>
-          </button>
-        </div>
-        <form className="px-5 py-5 flex flex-col gap-4" onSubmit={onSubmit}>
-          <div>
-            <label className="term-label block mb-1.5" htmlFor="upload-title-input">
-              Title
-            </label>
-            <input
-              id="upload-title-input"
-              className="term-input px-3 py-2.5 min-h-[44px]"
-              value={title}
-              onChange={(e) => onTitle(e.target.value)}
-              required
-              placeholder="e.g. Q3 Strategy Review"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="border border-dashed border-border hover:border-primary hover:bg-surface-1 transition py-8 text-center cursor-pointer min-h-[120px]"
-          >
-            <span className="material-symbols-outlined text-3xl text-muted">cloud_upload</span>
-            {file ? (
-              <span className="block font-mono text-micro uppercase tracking-[0.15em] text-primary mt-2">
-                {'>'} {file.name}
-              </span>
-            ) : (
-              <span className="block font-mono text-micro uppercase tracking-[0.15em] text-muted mt-2">
-                {'>'} Drop .pptx or .pdf here or click to browse
-              </span>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pptx,.pdf"
-              className="hidden"
-              onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-              required
-              disabled={busy}
-            />
-          </button>
-          {showSlideCount && (
-            <div>
-              <label className="term-label block mb-1.5" htmlFor="upload-slide-count">
-                Slide_Count
-              </label>
-              <input
-                id="upload-slide-count"
-                type="number"
-                min="1"
-                className="term-input px-3 py-2.5 min-h-[44px]"
-                value={slideCount}
-                onChange={(e) => onSlideCount(e.target.value)}
+    <Dialog.Root open={open} onOpenChange={(e) => !busy && e.open === false && onClose()} size="lg">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Upload Presentation</DialogTitle>
+          <DialogCloseTrigger disabled={busy} />
+        </DialogHeader>
+        <DialogBody>
+          <VStack as="form" gap="4" align="stretch" onSubmit={onSubmit}>
+            <Field.Root required>
+              <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                Title
+              </FieldLabel>
+              <Input
+                value={title}
+                onChange={(e) => onTitle(e.target.value)}
+                placeholder="e.g. Q3 Strategy Review"
                 required
+                size="lg"
               />
-            </div>
-          )}
-          {err && (
-            <div className="font-mono text-micro uppercase tracking-[0.15em] text-danger">
-              {'>'} {err}
-            </div>
-          )}
-          <button
-            type="submit"
-            className="term-button-primary w-full !py-3 mt-2 min-h-[48px]"
-            disabled={busy}
-          >
-            {busy ? (
-              <>
-                <span>{'>'}</span>
-                Uploading
-                <span className="cursor-blink">_</span>
-              </>
-            ) : (
-              <>
-                <span>{'>'}</span>
-                Upload &amp; Configure
-              </>
+            </Field.Root>
+
+            <Button
+              type="button"
+              variant="outline"
+              borderStyle="dashed"
+              onClick={() => fileRef.current?.click()}
+              h="32"
+              flexDirection="column"
+              gap="2"
+              cursor="pointer"
+            >
+              <Icon color="fg.muted" boxSize="8">
+                <UploadCloud />
+              </Icon>
+              <Text fontSize="sm" color={file ? 'green.solid' : 'fg.muted'} fontFamily="mono">
+                {file ? `> ${file.name}` : '> Drop .pptx or .pdf here or click to browse'}
+              </Text>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".pptx,.pdf"
+                style={{ display: 'none' }}
+                onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+                required
+                disabled={busy}
+              />
+            </Button>
+
+            {showSlideCount && (
+              <Field.Root required>
+                <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                  Slide Count
+                </FieldLabel>
+                <Input
+                  type="number"
+                  min="1"
+                  value={slideCount}
+                  onChange={(e) => onSlideCount(e.target.value)}
+                  required
+                  size="lg"
+                />
+              </Field.Root>
             )}
-          </button>
-        </form>
-      </div>
-    </div>
+
+            {err && (
+              <Text color="red.solid" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                {err}
+              </Text>
+            )}
+
+            <Button type="submit" colorPalette="green" size="lg" mt="2" disabled={busy}>
+              {busy ? 'Uploading…' : 'Upload & Configure'}
+            </Button>
+          </VStack>
+        </DialogBody>
+        <DialogFooter />
+      </DialogContent>
+    </Dialog.Root>
   );
 }

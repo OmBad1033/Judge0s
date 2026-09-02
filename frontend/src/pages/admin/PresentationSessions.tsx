@@ -1,17 +1,40 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Box,
+  Breadcrumb,
+  BreadcrumbCurrentLink,
+  BreadcrumbLink,
+  Button,
+  Dialog,
+  DialogBody,
+  DialogCloseTrigger,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Field,
+  FieldLabel,
+  Flex,
+  Heading,
+  HStack,
+  Icon,
+  Input,
+  Table,
+  Text,
+  VStack,
+} from '@chakra-ui/react';
+import { AlertTriangle, BarChart3, ChevronRight, Edit, Play, Trash2 } from 'lucide-react';
 import { api, ApiError } from '../../api';
 import type { Presentation, Session } from '../../types';
 import { useToast } from '../../lib/toast';
-import Skeleton from '../../components/Skeleton';
+import { PageHeader } from '../../components/ui/page-header';
+import { EmptyStateCard } from '../../components/ui/empty-state';
+import { StatusBadge } from '../../components/ui/status-badge';
+import { SkeletonRows } from '../../components/ui/skeleton';
 
-// Sessions-for-one-presentation view.
-// Reached by clicking a card on /admin/presentations.
-//
-// • Top bar: presentation title + Configure (slides) + Start (create+go-live) actions.
-// • Table: every session ever created for this presentation. Rows deep-link
-//   into the live ControlSession view (ended sessions route to Results).
 export default function PresentationSessions() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -44,8 +67,7 @@ export default function PresentationSessions() {
       setSessionName('');
       navigate(`/admin/sessions/${s.sessionCode}`);
     },
-    onError: (e) =>
-      toast.push('error', e instanceof ApiError ? e.message : 'Failed to start session'),
+    onError: (e) => toast.push('error', e instanceof ApiError ? e.message : 'Failed to start session'),
   });
 
   const deleteMut = useMutation({
@@ -63,18 +85,18 @@ export default function PresentationSessions() {
 
   if (presQ.isLoading) {
     return (
-      <div className="flex flex-col gap-4">
-        <Skeleton variant="card" />
-        <Skeleton variant="list" rows={3} />
-      </div>
+      <VStack gap="4" align="stretch">
+        <SkeletonRows rows={2} />
+      </VStack>
     );
   }
 
   if (presQ.isError || !presQ.data) {
     return (
-      <div className="term-card border-danger bg-[#fef2f2] px-4 py-3 font-mono text-micro uppercase tracking-[0.15em] text-danger">
-        {'>'} Presentation not found
-      </div>
+      <Alert.Root status="error" borderRadius="lg">
+        <Alert.Indicator />
+        <Alert.Title>Presentation not found</Alert.Title>
+      </Alert.Root>
     );
   }
 
@@ -85,251 +107,165 @@ export default function PresentationSessions() {
     .sort((a, b) => (b.endedAt ?? '').localeCompare(a.endedAt ?? ''))[0];
 
   return (
-    <div className="flex flex-col gap-4">
+    <VStack gap="4" align="stretch">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 font-mono text-micro uppercase tracking-[0.18em] text-muted">
-        <Link to="/admin/presentations" className="hover:text-on-surface">
-          Library
-        </Link>
-        <span>/</span>
-        <span className="text-on-surface truncate">{presentation.title}</span>
-      </div>
+      <Breadcrumb.Root size="sm">
+        <Breadcrumb.List>
+          <Breadcrumb.Item>
+            <BreadcrumbLink onClick={() => navigate('/admin/presentations')} cursor="pointer">
+              Library
+            </BreadcrumbLink>
+          </Breadcrumb.Item>
+          <Breadcrumb.Separator>
+            <ChevronRight size={14} />
+          </Breadcrumb.Separator>
+          <Breadcrumb.Item>
+            <BreadcrumbCurrentLink>{presentation.title}</BreadcrumbCurrentLink>
+          </Breadcrumb.Item>
+        </Breadcrumb.List>
+      </Breadcrumb.Root>
 
-      {/* HEADER + actions */}
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
-        <div className="min-w-0 flex-1">
-          <div className="term-label">[Presentation]</div>
-          <h1 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mt-1 truncate">
-            {presentation.title}
-          </h1>
-          <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-            {presentation.slideCount} Slides &nbsp;·&nbsp; {sessions.length} Session
-            {sessions.length === 1 ? '' : 's'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setConfirmDelete(true)}
-            disabled={deleteMut.isPending}
-            className="term-button-secondary min-h-[44px] !text-danger !border-danger hover:!bg-danger hover:!text-white"
-          >
-            <span className="material-symbols-outlined text-[18px]">delete</span>
-            Delete
-          </button>
-          <Link
-            to={`/admin/presentations/${presentation.id}/configure`}
-            className="term-button-secondary min-h-[44px]"
-          >
-            <span className="material-symbols-outlined text-[18px]">edit</span>
-            Configure
-          </Link>
-          {latestEnded && (
-            <Link
-              to={`/admin/sessions/${latestEnded.sessionCode}/analytics`}
-              className="term-button-secondary min-h-[44px]"
-            >
-              <span className="material-symbols-outlined text-[18px]">analytics</span>
-              Analytics
+      {/* Header + actions */}
+      <PageHeader
+        eyebrow="Presentation"
+        title={presentation.title}
+        description={`${presentation.slideCount} Slides · ${sessions.length} Session${sessions.length === 1 ? '' : 's'}`}
+        actions={
+          <>
+            <Button variant="outline" colorPalette="red" onClick={() => setConfirmDelete(true)} disabled={deleteMut.isPending}>
+              <Trash2 size={16} />
+              Delete
+            </Button>
+            <Link to={`/admin/presentations/${presentation.id}/configure`}>
+              <Button variant="outline">
+                <Edit size={16} />
+                Configure
+              </Button>
             </Link>
-          )}
-          <button
-            onClick={() => setShowNamePrompt(true)}
-            disabled={startMut.isPending}
-            className="term-button-primary min-h-[44px]"
-          >
-            <span className="material-symbols-outlined text-[18px]">play_arrow</span>
-            Start_Session
-          </button>
-        </div>
-      </div>
+            {latestEnded && (
+              <Link to={`/admin/sessions/${latestEnded.sessionCode}/analytics`}>
+                <Button variant="outline">
+                  <BarChart3 size={16} />
+                  Analytics
+                </Button>
+              </Link>
+            )}
+            <Button colorPalette="green" onClick={() => setShowNamePrompt(true)} disabled={startMut.isPending}>
+              <Play size={16} />
+              Start Session
+            </Button>
+          </>
+        }
+      />
 
-      {/* TABLE */}
       {sessionsQ.isLoading ? (
-        <Skeleton variant="list" rows={3} />
+        <SkeletonRows rows={3} />
       ) : sessions.length === 0 ? (
-        <EmptySessions onStart={() => setShowNamePrompt(true)} busy={startMut.isPending} />
+        <EmptyStateCard
+          icon={<Icon color="fg.muted" boxSize="10"><RadioIcon /></Icon>}
+          title="No sessions yet"
+          description="Start your first session to invite participants."
+        >
+          <Button colorPalette="green" onClick={() => setShowNamePrompt(true)} disabled={startMut.isPending}>
+            <Play size={16} />
+            Start Session
+          </Button>
+        </EmptyStateCard>
       ) : (
         <SessionsTable sessions={sessions} presentation={presentation} />
       )}
 
-      {showNamePrompt && (
-        <SessionNamePrompt
-          busy={startMut.isPending}
-          value={sessionName}
-          onChange={setSessionName}
-          onCancel={() => {
-            if (!startMut.isPending) {
-              setShowNamePrompt(false);
-              setSessionName('');
-            }
-          }}
-          onConfirm={() => startMut.mutate()}
-        />
-      )}
+      {/* Start session dialog */}
+      <Dialog.Root open={showNamePrompt} onOpenChange={(e) => !startMut.isPending && e.open === false && setShowNamePrompt(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Name this session?</DialogTitle>
+            <DialogCloseTrigger disabled={startMut.isPending} />
+          </DialogHeader>
+          <DialogBody>
+            <VStack as="form" gap="4" align="stretch" onSubmit={(e) => { e.preventDefault(); startMut.mutate(); }}>
+              <Field.Root>
+                <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+                  Session Name
+                </FieldLabel>
+                <Input
+                  autoFocus
+                  value={sessionName}
+                  onChange={(e) => setSessionName(e.target.value)}
+                  maxLength={120}
+                  placeholder="e.g. Q3 Board Review"
+                  size="lg"
+                />
+              </Field.Root>
+              <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                Leave blank — we&apos;ll use the session code.
+              </Text>
+              <HStack justify="flex-end" gap="2">
+                <Button variant="outline" onClick={() => setShowNamePrompt(false)} disabled={startMut.isPending}>
+                  Cancel
+                </Button>
+                <Button type="submit" colorPalette="green" disabled={startMut.isPending}>
+                  {startMut.isPending ? 'Starting…' : 'Start Session'}
+                </Button>
+              </HStack>
+            </VStack>
+          </DialogBody>
+        </DialogContent>
+      </Dialog.Root>
 
-      {confirmDelete && (
-        <DeleteConfirmModal
-          presentationTitle={presentation.title}
-          sessionCount={sessions.length}
-          busy={deleteMut.isPending}
-          onCancel={() => !deleteMut.isPending && setConfirmDelete(false)}
-          onConfirm={() => deleteMut.mutate()}
-        />
-      )}
-    </div>
-  );
-}
-
-function DeleteConfirmModal({
-  presentationTitle,
-  sessionCount,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  presentationTitle: string;
-  sessionCount: number;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/30 backdrop-blur-sm"
-      onClick={() => !busy && onCancel()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="delete-title"
-    >
-      <div className="term-card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <div className="border-b border-border px-5 py-4">
-          <div className="term-label text-danger">[Danger_Zone]</div>
-          <h2 id="delete-title" className="font-mono text-h1 text-on-surface mt-1">
-            Delete Presentation?
-          </h2>
-        </div>
-        <div className="px-5 py-5">
-          <p className="font-body text-body text-on-surface-variant">
-            This permanently removes{' '}
-            <span className="font-mono text-on-surface">{presentationTitle}</span> and{' '}
-            <span className="font-mono text-on-surface">
-              all {sessionCount} session{sessionCount === 1 ? '' : 's'}
-            </span>{' '}
-            associated with it, including every participant response and the uploaded file.
-          </p>
-          <p className="font-mono text-micro uppercase tracking-[0.15em] text-danger mt-3">
-            {'>'} This action cannot be undone.
-          </p>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
-          <button onClick={onCancel} disabled={busy} className="term-button-secondary min-h-[44px]">
-            Cancel
-          </button>
-          <button onClick={onConfirm} disabled={busy} className="term-button-primary min-h-[44px] !bg-danger">
-            {busy ? 'Deleting...' : 'Delete_Everything'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SessionNamePrompt({
-  value,
-  onChange,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/30 backdrop-blur-sm"
-      onClick={() => !busy && onCancel()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="session-name-title"
-    >
-      <div className="term-card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <div className="border-b border-border px-5 py-4">
-          <div className="term-label">[New_Session]</div>
-          <h2 id="session-name-title" className="font-mono text-h1 text-on-surface mt-1">
-            Name this session?
-          </h2>
-        </div>
-        <form
-          className="px-5 py-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onConfirm();
-          }}
-        >
-          <label className="term-label block mb-1.5" htmlFor="session-name-input">
-            Session_Name
-          </label>
-          <input
-            id="session-name-input"
-            autoFocus
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            maxLength={120}
-            placeholder="e.g. Q3 Board Review"
-            className="w-full h-11 px-3 border border-border bg-surface font-mono text-body text-on-surface placeholder:text-muted focus:border-primary focus:outline-none"
-          />
-          <p className="font-mono text-micro uppercase tracking-[0.15em] text-muted mt-3">
-            {'>'} You can leave this blank — we&apos;ll use the session code.
-          </p>
-          <div className="flex justify-end gap-2 border-t border-border px-5 py-4 -mx-5 -mb-5 mt-5">
-            <button type="button" onClick={onCancel} disabled={busy} className="term-button-secondary min-h-[44px]">
+      {/* Delete confirmation */}
+      <Dialog.Root open={confirmDelete} onOpenChange={(e) => !deleteMut.isPending && e.open === false && setConfirmDelete(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle color="red.solid">Delete Presentation?</DialogTitle>
+            <DialogCloseTrigger disabled={deleteMut.isPending} />
+          </DialogHeader>
+          <DialogBody>
+            <VStack gap="4" align="stretch">
+              <HStack gap="2" color="red.solid">
+                <AlertTriangle size={18} />
+                <Text fontSize="sm">
+                  This permanently removes <strong>{presentation.title}</strong> and all{' '}
+                  <strong>{sessions.length} session{sessions.length === 1 ? '' : 's'}</strong> associated
+                  with it, including every participant response and the uploaded file.
+                </Text>
+              </HStack>
+              <Text color="red.solid" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                This action cannot be undone.
+              </Text>
+            </VStack>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleteMut.isPending}>
               Cancel
-            </button>
-            <button type="submit" disabled={busy} className="term-button-primary min-h-[44px]">
-              {busy ? 'Starting...' : 'Start_Session'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+            </Button>
+            <Button colorPalette="red" onClick={() => deleteMut.mutate()} disabled={deleteMut.isPending}>
+              {deleteMut.isPending ? 'Deleting…' : 'Delete Everything'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog.Root>
+    </VStack>
   );
-}
-
-function StatusPill({ status }: { status: Session['status'] }) {
-  if (status === 'live') {
-    return (
-      <span className="status-pill status-pill-live">
-        <span className="w-1.5 h-1.5 bg-primary rounded-full pulse-emerald inline-block" />
-        Live
-      </span>
-    );
-  }
-  if (status === 'ended') return <span className="status-pill status-pill-ended">Ended</span>;
-  if (status === 'paused') return <span className="status-pill status-pill-draft">Paused</span>;
-  return <span className="status-pill status-pill-draft">Draft</span>;
 }
 
 function SessionsTable({ sessions, presentation }: { sessions: Session[]; presentation: Presentation }) {
+  const navigate = useNavigate();
   return (
-    <div className="term-card overflow-x-auto">
-      <table className="w-full font-mono text-label">
-        <thead>
-          <tr className="border-b border-border text-micro uppercase tracking-[0.18em] text-muted">
-            <th className="text-left px-4 py-3 font-normal">[Name]</th>
-            <th className="text-left px-4 py-3 font-normal">[Code]</th>
-            <th className="text-left px-4 py-3 font-normal">Status</th>
-            <th className="text-left px-4 py-3 font-normal hidden sm:table-cell">Slide</th>
-            <th className="text-left px-4 py-3 font-normal hidden md:table-cell">Created</th>
-            <th className="text-left px-4 py-3 font-normal hidden md:table-cell">Started</th>
-            <th className="text-left px-4 py-3 font-normal hidden lg:table-cell">Ended</th>
-            <th className="text-right px-4 py-3 font-normal">Open</th>
-            <th className="text-right px-4 py-3 font-normal hidden sm:table-cell">Analytics</th>
-          </tr>
-        </thead>
-        <tbody>
+    <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" overflow="hidden" bg="bg.surface">
+      <Table.Root size="sm" interactive>
+        <Table.Header>
+          <Table.Row>
+            <Table.ColumnHeader px="4">Name</Table.ColumnHeader>
+            <Table.ColumnHeader>Code</Table.ColumnHeader>
+            <Table.ColumnHeader>Status</Table.ColumnHeader>
+            <Table.ColumnHeader display={{ base: 'none', sm: 'table-cell' }}>Slide</Table.ColumnHeader>
+            <Table.ColumnHeader display={{ base: 'none', md: 'table-cell' }}>Created</Table.ColumnHeader>
+            <Table.ColumnHeader display={{ base: 'none', md: 'table-cell' }}>Started</Table.ColumnHeader>
+            <Table.ColumnHeader textAlign="right" pr="4">Open</Table.ColumnHeader>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
           {sessions.map((s) => {
             const target =
               s.status === 'ended'
@@ -340,74 +276,68 @@ function SessionsTable({ sessions, presentation }: { sessions: Session[]; presen
                 ? '—'
                 : `${s.currentSlideNumber ?? 0} / ${presentation.slideCount}`;
             return (
-              <tr
+              <Table.Row
                 key={s.id}
-                onClick={() => {
-                  window.location.href = target;
-                }}
-                className="border-b border-border last:border-b-0 hover:bg-surface-1 cursor-pointer transition"
+                onClick={() => navigate(target)}
+                cursor="pointer"
+                _hover={{ bg: 'bg.muted' }}
               >
-                <td className="px-4 py-3 text-on-surface">{s.name || s.sessionCode}</td>
-                <td className="px-4 py-3 text-muted">{s.sessionCode}</td>
-                <td className="px-4 py-3">
-                  <StatusPill status={s.status} />
-                </td>
-                <td className="px-4 py-3 text-muted hidden sm:table-cell">{slideLabel}</td>
-                <td className="px-4 py-3 text-muted hidden md:table-cell">
+                <Table.Cell px="4" fontWeight="medium">
+                  {s.name || s.sessionCode}
+                </Table.Cell>
+                <Table.Cell color="fg.muted" fontFamily="mono">
+                  {s.sessionCode}
+                </Table.Cell>
+                <Table.Cell>
+                  <StatusBadge status={s.status} />
+                </Table.Cell>
+                <Table.Cell color="fg.muted" display={{ base: 'none', sm: 'table-cell' }}>
+                  {slideLabel}
+                </Table.Cell>
+                <Table.Cell color="fg.muted" display={{ base: 'none', md: 'table-cell' }}>
                   {formatTime(s.createdAt)}
-                </td>
-                <td className="px-4 py-3 text-muted hidden md:table-cell">
+                </Table.Cell>
+                <Table.Cell color="fg.muted" display={{ base: 'none', md: 'table-cell' }}>
                   {s.startedAt ? formatTime(s.startedAt) : '—'}
-                </td>
-                <td className="px-4 py-3 text-muted hidden lg:table-cell">
-                  {s.endedAt ? formatTime(s.endedAt) : '—'}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <span className="material-symbols-outlined text-[18px] text-muted">chevron_right</span>
-                </td>
-                <td className="px-4 py-3 text-right hidden sm:table-cell">
-                  <Link
-                    to={`/admin/sessions/${s.sessionCode}/analytics`}
-                    onClick={(e) => e.stopPropagation()}
-                    title="View analytics"
-                    className="inline-flex items-center gap-1 font-mono text-micro uppercase tracking-[0.15em] text-muted hover:text-primary transition"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">analytics</span>
-                  </Link>
-                </td>
-              </tr>
+                </Table.Cell>
+                <Table.Cell textAlign="right" pr="4">
+                  <HStack gap="1" justify="flex-end">
+                    <Link
+                      to={`/admin/sessions/${s.sessionCode}/analytics`}
+                      onClick={(e) => e.stopPropagation()}
+                      title="View analytics"
+                    >
+                      <Button variant="ghost" size="xs" aria-label="Analytics">
+                        <BarChart3 size={14} />
+                      </Button>
+                    </Link>
+                    <ChevronRight size={16} color="var(--chakra-colors-fg-muted)" />
+                  </HStack>
+                </Table.Cell>
+              </Table.Row>
             );
           })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function EmptySessions({ onStart, busy }: { onStart: () => void; busy: boolean }) {
-  return (
-    <div className="term-card text-center px-5 py-12">
-      <span className="material-symbols-outlined text-4xl text-muted">cast</span>
-      <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface mt-3">
-        No_Sessions_Yet
-      </h2>
-      <p className="font-body text-body text-on-surface-variant mt-1 mb-6">
-        Start your first session to invite participants.
-      </p>
-      <button onClick={onStart} disabled={busy} className="term-button-primary mx-auto min-h-[48px]">
-        <span className="material-symbols-outlined text-[18px]">play_arrow</span>
-        {busy ? 'Starting...' : 'Start_Session'}
-      </button>
-    </div>
+        </Table.Body>
+      </Table.Root>
+    </Box>
   );
 }
 
 function formatTime(iso: string): string {
-  // Trim to YYYY-MM-DD HH:MM in UTC for a compact, locale-stable display.
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(
-    d.getUTCHours(),
-  )}:${pad(d.getUTCMinutes())}`;
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
+function RadioIcon() {
+  return (
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
+      <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" />
+      <path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1" />
+    </svg>
+  );
 }

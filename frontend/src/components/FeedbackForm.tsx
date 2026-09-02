@@ -1,3 +1,4 @@
+import { Box, RadioCard, RadioCardItem, RadioCardLabel, Text, Textarea, VStack } from '@chakra-ui/react';
 import type { SlideEventRule } from '../types';
 
 interface Props {
@@ -7,7 +8,7 @@ interface Props {
 }
 
 // Controlled input-only — submit is handled by the parent (single submit
-// saves slide feedback + default answers together per project taste).
+// saves slide feedback + default answers together).
 export default function FeedbackForm({ rule, value, onChange }: Props) {
   if (!rule.enabled || rule.type === 'disabled') return null;
 
@@ -15,66 +16,71 @@ export default function FeedbackForm({ rule, value, onChange }: Props) {
     rule.type === 'boolean' ? ['yes', 'no'] : rule.type === 'multiple_choice' ? (rule.options ?? []) : [];
 
   return (
-    <div className="term-card">
+    <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" overflow="hidden">
       {rule.question && (
-        <div className="px-4 pt-4 pb-3 border-b border-border">
-          <p className="font-mono text-body text-on-surface leading-snug">{rule.question}</p>
-        </div>
+        <Box px="4" py="3" borderBottomWidth="1px" borderColor="border.subtle">
+          <Text fontWeight="semibold">{rule.question}</Text>
+        </Box>
       )}
 
       {(rule.type === 'boolean' || rule.type === 'multiple_choice') && (
-        <div className="p-3 flex flex-col gap-2">
+        <RadioCard.Root
+          size="md"
+          variant="outline"
+          value={value}
+          onValueChange={(e) => onChange(e.value ?? '')}
+          gap="2"
+          p="3"
+        >
           {options.map((opt, i) => {
             const selected = value === opt;
             const label = String.fromCharCode(65 + i);
             return (
-              <button
+              <RadioCardItem
                 key={opt}
-                type="button"
-                onClick={() => onChange(opt)}
-                className={`group relative flex items-center gap-3 px-4 py-3 border text-left transition ${
-                  selected
-                    ? 'border-primary bg-primary-dim/40'
-                    : 'border-border hover:border-primary hover:bg-surface-1'
-                }`}
+                value={opt}
+                borderColor={selected ? 'green.solid' : 'border.subtle'}
+                _checked={{ borderColor: 'green.solid', bg: 'green.solid/5' }}
               >
-                <span
-                  className={`font-mono text-micro uppercase tracking-[0.15em] w-6 shrink-0 ${
-                    selected ? 'text-primary' : 'text-muted'
-                  }`}
-                >
-                  {label}.
-                </span>
-                <span
-                  className={`font-mono text-body flex-1 capitalize ${selected ? 'text-on-surface' : 'text-on-surface-variant'}`}
-                >
-                  {opt}
-                </span>
-                <span
-                  className={`material-symbols-outlined text-[18px] ${selected ? 'text-primary' : 'text-transparent'}`}
-                >
-                  {selected ? 'check_circle' : 'radio_button_unchecked'}
-                </span>
-              </button>
+                <RadioCardLabel flex="1">
+                  <Box display="flex" alignItems="center" gap="3">
+                    <Text
+                      color={selected ? 'green.solid' : 'fg.muted'}
+                      fontSize="xs"
+                      fontFamily="mono"
+                      textTransform="uppercase"
+                      letterSpacing="wider"
+                      w="5"
+                      flexShrink="0"
+                    >
+                      {label}.
+                    </Text>
+                    <Text fontWeight="medium" textTransform="capitalize">
+                      {opt}
+                    </Text>
+                  </Box>
+                </RadioCardLabel>
+              </RadioCardItem>
             );
           })}
-        </div>
+        </RadioCard.Root>
       )}
 
       {rule.type === 'open_text' && (
-        <div className="p-4 relative">
-          <textarea
-            className="term-input px-3 py-2 min-h-[120px] resize-none"
+        <Box p="3" position="relative">
+          <Textarea
             value={value}
             maxLength={2000}
-            placeholder="> Type your response…"
+            placeholder="Type your response…"
+            minH="120px"
+            resize="none"
             onChange={(e) => onChange(e.target.value)}
           />
-          <div className="absolute bottom-6 right-6 font-mono text-micro uppercase tracking-[0.15em] text-muted bg-surface border border-border px-1.5 py-0.5">
+          <Text position="absolute" bottom="5" right="5" color="fg.muted" fontSize="xs" fontFamily="mono" bg="bg.surface" px="1.5" py="0.5" borderRadius="sm">
             {value.length} / 2000
-          </div>
-        </div>
+          </Text>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

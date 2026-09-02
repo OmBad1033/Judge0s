@@ -10,10 +10,22 @@ import type {
   ParticipantState,
   ConnectionState,
 } from '../../types';
+import {
+  Alert,
+  Box,
+  Button,
+  Flex,
+  Heading,
+  HStack,
+  Icon,
+  Skeleton,
+  Text,
+  VStack,
+} from '@chakra-ui/react';
+import { CheckCircle2, Hourglass, Send, StopCircle, WifiOff } from 'lucide-react';
 import FeedbackForm from '../../components/FeedbackForm';
 import DefaultQuestionForm from '../../components/DefaultQuestionForm';
 import ConnectionStatus from '../../components/ConnectionStatus';
-import Skeleton from '../../components/Skeleton';
 
 const ERR_MSG: Record<string, string> = {
   RESUBMISSION_NOT_ALLOWED: "You can't change your response for this slide.",
@@ -31,11 +43,6 @@ const mapErr = (e: unknown) => {
   return ERR_MSG[c] ?? c;
 };
 
-// Page 2 of the participation flow: the in-session view that shows the
-// active slide, configured feedback form, any default questions, and a
-// single submit button that saves everything together (per project taste).
-// Mobile-first — submit button is bottom-anchored with a safe-area inset
-// so it's reachable with a thumb and survives the iOS home-indicator.
 export default function ViewSession() {
   const { code } = useParams();
   const navigate = useNavigate();
@@ -89,8 +96,7 @@ export default function ViewSession() {
 
   const event: SlideEvent | null = wsEvent ?? boot?.event ?? null;
   const sessionStatus = boot?.session.status ?? null;
-  const slideNumber =
-    event?.type === 'SLIDE_CHANGED' ? event.slideNumber : boot?.session.currentSlideNumber ?? null;
+  const slideNumber = event?.type === 'SLIDE_CHANGED' ? event.slideNumber : boot?.session.currentSlideNumber ?? null;
   const rule: SlideEventRule | null = event?.type === 'SLIDE_CHANGED' ? (event.feedbackRule ?? null) : null;
   const defaultQuestions = event?.type === 'SLIDE_CHANGED' ? (event.defaultQuestions ?? []) : [];
   const existing = slideNumber != null ? (responses.find((r) => r.slideNumber === slideNumber) ?? null) : null;
@@ -102,9 +108,7 @@ export default function ViewSession() {
     setSlideValue(ex?.responseValue ?? '');
     const dvs: Record<string, string> = {};
     for (const dq of defaultQuestions) {
-      const dr = defaultResponses.find(
-        (r) => r.defaultQuestionId === dq.id && r.slideNumber === slideNumber,
-      );
+      const dr = defaultResponses.find((r) => r.defaultQuestionId === dq.id && r.slideNumber === slideNumber);
       dvs[dq.id] = dr?.responseValue ?? '';
     }
     setDefaultValues(dvs);
@@ -128,9 +132,7 @@ export default function ViewSession() {
       try {
         const res = await api.submitFeedback(code, pid, slideNumber, slideValue);
         setResponses((rs) =>
-          [...rs.filter((r) => r.slideNumber !== slideNumber), res].sort(
-            (a, b) => a.slideNumber - b.slideNumber,
-          ),
+          [...rs.filter((r) => r.slideNumber !== slideNumber), res].sort((a, b) => a.slideNumber - b.slideNumber),
         );
       } catch (e) {
         errs.push(mapErr(e));
@@ -142,12 +144,10 @@ export default function ViewSession() {
       if (!v) continue;
       try {
         const res = await api.submitDefaultFeedback(code, pid, dq.id, slideNumber, v);
-        setDefaultResponses((rs) =>
-          [
-            ...rs.filter((r) => !(r.defaultQuestionId === dq.id && r.slideNumber === slideNumber)),
-            res,
-          ],
-        );
+        setDefaultResponses((rs) => [
+          ...rs.filter((r) => !(r.defaultQuestionId === dq.id && r.slideNumber === slideNumber)),
+          res,
+        ]);
       } catch (e) {
         errs.push(mapErr(e));
       }
@@ -162,142 +162,157 @@ export default function ViewSession() {
 
   const connectionState: ConnectionState = ended ? 'ended' : connected ? 'connected' : 'reconnecting';
 
-  // Connecting state — neither the REST bootstrap nor the WS handshake has data yet.
   if (!event && !bootError) {
     return (
-      <div className="dot-grid min-h-screen text-on-surface font-body">
-        <main className="w-full max-w-md mx-auto min-h-screen flex flex-col px-4 pt-6 pb-8 gap-4">
-          <Skeleton variant="card" />
-          <Skeleton variant="card" rows={3} />
-          <Skeleton variant="text" rows={2} />
-        </main>
-      </div>
+      <Box minH="100dvh" bg="bg.canvas" color="fg">
+        <Box maxW="md" mx="auto" minH="100dvh" display="flex" flexDirection="column" px="4" pt="6" pb="8" gap="4">
+          <Skeleton h="20" borderRadius="lg" />
+          <Skeleton h="32" borderRadius="lg" />
+          <Skeleton h="24" borderRadius="lg" />
+        </Box>
+      </Box>
     );
   }
 
   return (
-    <div className="dot-grid min-h-screen text-on-surface font-body relative">
-      {/* Reconnecting / status banner — non-blocking, slides under the safe area. */}
-      <div
-        className={`sticky top-0 z-40 ${
-          connectionState === 'reconnecting' ? 'bg-warning text-on-primary' : 'hidden'
-        }`}
+    <Box minH="100dvh" bg="bg.canvas" color="fg" position="relative">
+      {/* Reconnecting / status banner */}
+      <Box
+        position="sticky"
+        top="0"
+        zIndex="40"
+        display={connectionState === 'reconnecting' ? 'block' : 'none'}
+        bg="orange.solid"
+        color="orange.fg"
         role="status"
         aria-live="polite"
       >
-        <div className="flex justify-center items-center py-1.5 px-4 gap-2 font-mono text-micro uppercase tracking-[0.18em] text-on-surface">
-          <span className="material-symbols-outlined text-[14px]">wifi_tethering_error</span>
-          <span>{'>'} Reconnecting — Your responses are safe</span>
-        </div>
-      </div>
+        <Flex justify="center" align="center" py="1.5" px="4" gap="2" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+          <WifiOff size={14} />
+          <span>Reconnecting — Your responses are safe</span>
+        </Flex>
+      </Box>
 
-      <main className="w-full max-w-md mx-auto min-h-screen flex flex-col px-4 pt-4 pb-32 gap-4">
+      <Box maxW="md" mx="auto" minH="100dvh" display="flex" flexDirection="column" px="4" pt="4" pb="32" gap="4">
         {/* Top status strip */}
-        <header className="flex items-center justify-between border border-border bg-surface px-3 py-2">
-          <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-            [Session_Id: {code}]
-          </span>
+        <Flex align="center" justify="space-between" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" px="3" py="2">
+          <Text color="fg.muted" fontSize="xs" fontFamily="mono" textTransform="uppercase" letterSpacing="wider">
+            Session: {code}
+          </Text>
           <ConnectionStatus state={connectionState} />
-        </header>
+        </Flex>
 
         {/* Slide badge */}
-        <div className="border border-border bg-surface px-3 py-2 flex items-center justify-between">
-          <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-            [Active_Slide]
-          </span>
-          <span className="font-mono text-h1 text-on-surface">
+        <Flex align="center" justify="space-between" borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" px="3" py="2">
+          <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+            Active Slide
+          </Text>
+          <Text fontFamily="mono" fontSize="2xl" fontWeight="bold">
             {String(slideNumber ?? '—').padStart(2, '0')}
-          </span>
-        </div>
+          </Text>
+        </Flex>
 
         {bootError && !ended && (
-          <div className="border border-warning bg-[#fef3c7] px-3 py-2 flex items-start gap-2 text-warning">
-            <span className="material-symbols-outlined text-[18px]">sync_problem</span>
-            <div className="flex flex-col">
-              <span className="font-mono text-micro uppercase tracking-[0.15em]">Couldn't load session state</span>
-              <span className="font-body text-body">{bootError}</span>
-            </div>
-          </div>
+          <Alert.Root status="warning" borderRadius="lg" size="sm">
+            <Alert.Indicator />
+            <Box>
+              <Alert.Title>Couldn&apos;t load session state</Alert.Title>
+              <Alert.Description>{bootError}</Alert.Description>
+            </Box>
+          </Alert.Root>
         )}
 
         {ended && (
-          <section className="border border-border bg-surface p-6 flex flex-col items-center justify-center text-center gap-3">
-            <span className="material-symbols-outlined text-3xl text-danger">stop_circle</span>
-            <div>
-              <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface">
-                Session_Terminated
-              </h2>
-              <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-                {'>'} Thank you for your feedback.
-              </p>
-            </div>
-          </section>
+          <Card>
+            <VStack gap="3" textAlign="center">
+              <Icon color="red.solid" boxSize="8">
+                <StopCircle />
+              </Icon>
+              <Heading size="md" textTransform="uppercase" letterSpacing="tight">
+                Session Ended
+              </Heading>
+              <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                Thank you for your feedback.
+              </Text>
+            </VStack>
+          </Card>
         )}
 
         {waiting && !ended && (
-          <section className="border border-border bg-surface p-6 flex flex-col items-center justify-center text-center gap-3">
-            <div className="relative w-12 h-12 flex items-center justify-center">
-              <div className="absolute inset-0 border-2 border-border border-t-primary animate-spin" />
-              <span className="material-symbols-outlined text-2xl text-muted">hourglass_empty</span>
-            </div>
-            <div>
-              <h2 className="font-mono text-display-sm uppercase tracking-[-0.01em] text-on-surface">
-                Awaiting_Presenter
-              </h2>
-              <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-                {'>'} The presentation will begin shortly. Keep this screen open.
-              </p>
-            </div>
-          </section>
+          <Card>
+            <VStack gap="3" textAlign="center">
+              <Box position="relative" w="12" h="12" display="grid" placeItems="center">
+                <Box
+                  position="absolute"
+                  inset="0"
+                  borderWidth="2px"
+                  borderColor="border.emphasized"
+                  borderTopColor="green.solid"
+                  borderRadius="full"
+                  animation="spin 1s linear infinite"
+                />
+                <Icon color="fg.muted" boxSize="6">
+                  <Hourglass />
+                </Icon>
+              </Box>
+              <Heading size="md" textTransform="uppercase" letterSpacing="tight">
+                Awaiting Presenter
+              </Heading>
+              <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                The presentation will begin shortly. Keep this screen open.
+              </Text>
+            </VStack>
+          </Card>
         )}
 
         {active && !ended && (
-          <section className="flex flex-col gap-4">
+          <VStack gap="4" align="stretch">
             {/* Slide card */}
-            <div className="border border-border bg-surface">
-              <div className="border-b border-border px-4 py-2">
-                <span className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                  [Query_Data]
-                </span>
-              </div>
-              <div className="px-4 py-4">
-                {hasContent ? (
-                  <>
-                    {event!.slide?.title && (
-                      <h1 className="font-mono text-h1 text-on-surface mb-px uppercase tracking-[-0.01em]">
-                        {event!.slide.title}
-                      </h1>
-                    )}
-                    {event!.slide?.summary && (
-                      <p className="font-body text-body text-on-surface-variant mt-1">
-                        {event!.slide.summary}
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-4">
-                    <span className="material-symbols-outlined text-3xl text-muted">visibility_off</span>
-                    <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted mt-1">
-                      {'>'} No_Query
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
+            <Card>
+              <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider" borderBottomWidth="1px" borderColor="border.subtle" px="4" py="2" mx="-4" mt="-4" mb="1">
+                Query Data
+              </Text>
+              {hasContent ? (
+                <Box>
+                  {event!.slide?.title && (
+                    <Heading size="md" mb="1" textTransform="uppercase" letterSpacing="tight">
+                      {event!.slide.title}
+                    </Heading>
+                  )}
+                  {event!.slide?.summary && (
+                    <Text color="fg.muted" fontSize="sm" lineHeight="relaxed">
+                      {event!.slide.summary}
+                    </Text>
+                  )}
+                </Box>
+              ) : (
+                <VStack py="4" gap="1" textAlign="center">
+                  <Icon color="fg.muted" boxSize="6">
+                    <EyeOffIcon />
+                  </Icon>
+                  <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                    No content
+                  </Text>
+                </VStack>
+              )}
+            </Card>
 
             {/* Slide feedback form */}
             {rule?.enabled && rule.type !== 'disabled' &&
               (locked ? (
-                <div className="border border-border bg-surface p-6 flex flex-col items-center justify-center text-center gap-2">
-                  <span className="material-symbols-outlined text-3xl text-primary">check_circle</span>
-                  <p className="font-mono text-body text-on-surface">
-                    You answered:{' '}
-                    <span className="font-medium capitalize">{existing?.responseValue ?? '—'}</span>
-                  </p>
-                  <p className="font-mono text-micro uppercase tracking-[0.18em] text-muted">
-                    {'>'} This slide does not allow changes.
-                  </p>
-                </div>
+                <Card>
+                  <VStack gap="2" textAlign="center" py="2">
+                    <Icon color="green.solid" boxSize="6">
+                      <CheckCircle2 />
+                    </Icon>
+                    <Text fontWeight="medium">
+                      You answered: <strong className="capitalize">{existing?.responseValue ?? '—'}</strong>
+                    </Text>
+                    <Text color="fg.muted" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                      This slide does not allow changes.
+                    </Text>
+                  </VStack>
+                </Card>
               ) : (
                 <FeedbackForm rule={rule} value={slideValue} onChange={setSlideValue} />
               ))}
@@ -312,51 +327,81 @@ export default function ViewSession() {
               />
             ))}
 
-            {/* Status messages — above the bottom-anchored submit so users see the result without scrolling. */}
+            {/* Status messages */}
             {status.kind === 'ok' && (
-              <p className="flex items-center gap-1 font-mono text-micro uppercase tracking-[0.15em] text-primary">
-                <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                {'>'} {status.message}
-              </p>
+              <HStack gap="1.5" color="green.solid" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                <CheckCircle2 size={16} />
+                <span>{status.message}</span>
+              </HStack>
             )}
             {status.kind === 'error' && (
-              <p className="flex items-center gap-1 font-mono text-micro uppercase tracking-[0.15em] text-danger">
-                <span className="material-symbols-outlined text-[16px]">error</span>
-                {'>'} {status.message}
-              </p>
+              <HStack gap="1.5" color="red.solid" fontSize="xs" textTransform="uppercase" letterSpacing="wider">
+                <AlertCircleIcon />
+                <span>{status.message}</span>
+              </HStack>
             )}
-          </section>
+          </VStack>
         )}
-      </main>
+      </Box>
 
-      {/* Bottom-anchored submit bar (mobile-first). Stays out of the way until the slide is submittable. */}
+      {/* Bottom-anchored submit bar */}
       {active && !ended && canSubmit && (
-        <div
-          className="fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 pt-3"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
+        <Box
+          position="fixed"
+          bottom="0"
+          left="0"
+          right="0"
+          zIndex="30"
+          bg="bg.panel"
+          borderTopWidth="1px"
+          borderColor="border.subtle"
+          px="4"
+          pt="3"
+          pb="calc(env(safe-area-inset-bottom, 0px) + 12px)"
         >
-          <div className="max-w-md mx-auto">
-            <button
+          <Box maxW="md" mx="auto">
+            <Button
               onClick={submitAll}
+              colorPalette="green"
+              size="lg"
+              w="full"
               disabled={status.kind === 'submitting'}
-              className="term-button-primary w-full !py-3.5 min-h-[48px]"
             >
-              {status.kind === 'submitting' ? (
-                <>
-                  <span>{'>'}</span>
-                  Submitting
-                  <span className="cursor-blink">_</span>
-                </>
-              ) : (
-                <>
-                  <span>Submit_Response</span>
-                  <span className="material-symbols-outlined text-[18px]">send</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+              {status.kind === 'submitting' ? 'Submitting…' : 'Submit Response'}
+              <Send size={18} />
+            </Button>
+          </Box>
+        </Box>
       )}
-    </div>
+    </Box>
+  );
+}
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <Box borderWidth="1px" borderColor="border.subtle" borderRadius="lg" bg="bg.surface" px="4" py="4">
+      {children}
+    </Box>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" x2="22" y1="2" y2="22" />
+    </svg>
+  );
+}
+
+function AlertCircleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" x2="12" y1="8" y2="12" />
+      <line x1="12" x2="12.01" y1="16" y2="16" />
+    </svg>
   );
 }

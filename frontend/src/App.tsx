@@ -18,27 +18,17 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin/presentations" element={<AdminShell><UploadPresentation /></AdminShell>} />
-        <Route
-          path="/admin/presentations/:id/sessions"
-          element={<AdminShell><PresentationSessions /></AdminShell>}
-        />
-        <Route
-          path="/admin/presentations/:id/configure"
-          element={<AdminShell><ConfigureSlides /></AdminShell>}
-        />
-        <Route
-          path="/admin/sessions/:code"
-          element={<AdminShell><ControlSession /></AdminShell>}
-        />
-        <Route
-          path="/admin/sessions/:code/results"
-          element={<AdminShell><SessionResults /></AdminShell>}
-        />
-        <Route
-          path="/admin/sessions/:code/analytics"
-          element={<AdminShell><SessionAnalytics /></AdminShell>}
-        />
+        {/* Layout route: AdminShell mounts once and persists across all admin
+            pages, so the sidebar collapse state and auth session survive
+            in-app navigation between different admin routes. */}
+        <Route element={<AdminShell />}>
+          <Route path="/admin/presentations" element={<UploadPresentation />} />
+          <Route path="/admin/presentations/:id/sessions" element={<PresentationSessions />} />
+          <Route path="/admin/presentations/:id/configure" element={<ConfigureSlides />} />
+          <Route path="/admin/sessions/:code" element={<ControlSession />} />
+          <Route path="/admin/sessions/:code/results" element={<SessionResults />} />
+          <Route path="/admin/sessions/:code/analytics" element={<SessionAnalytics />} />
+        </Route>
         {/* Deep-link from QR / shared URL: /join/:code auto-fills the form. */}
         <Route path="/join" element={<JoinSession />} />
         <Route path="/join/:code" element={<JoinSession />} />
