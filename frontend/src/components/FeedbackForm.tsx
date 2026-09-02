@@ -1,4 +1,4 @@
-import { Box, RadioCard, RadioCardItem, RadioCardLabel, Text, Textarea, VStack } from '@chakra-ui/react';
+import { Box, Button, Text, Textarea, VStack } from '@chakra-ui/react';
 import type { SlideEventRule } from '../types';
 
 interface Props {
@@ -24,46 +24,46 @@ export default function FeedbackForm({ rule, value, onChange }: Props) {
       )}
 
       {(rule.type === 'boolean' || rule.type === 'multiple_choice') && (
-        <RadioCard.Root
-          size="md"
-          variant="outline"
-          value={value}
-          onValueChange={(e) => onChange(e.value ?? '')}
-          gap="2"
-          p="3"
-        >
+        <VStack gap="2" p="3" align="stretch">
           {options.map((opt, i) => {
             const selected = value === opt;
             const label = String.fromCharCode(65 + i);
             return (
-              <RadioCardItem
+              <Button
                 key={opt}
-                value={opt}
+                type="button"
+                onClick={() => onChange(opt)}
+                variant={selected ? 'solid' : 'outline'}
+                colorPalette={selected ? 'green' : undefined}
+                justifyContent="flex-start"
+                h="auto"
+                minH="12"
+                px="4"
+                py="3"
+                textAlign="left"
                 borderColor={selected ? 'green.solid' : 'border.subtle'}
-                _checked={{ borderColor: 'green.solid', bg: 'green.solid/5' }}
+                borderRadius="md"
               >
-                <RadioCardLabel flex="1">
-                  <Box display="flex" alignItems="center" gap="3">
-                    <Text
-                      color={selected ? 'green.solid' : 'fg.muted'}
-                      fontSize="xs"
-                      fontFamily="mono"
-                      textTransform="uppercase"
-                      letterSpacing="wider"
-                      w="5"
-                      flexShrink="0"
-                    >
-                      {label}.
-                    </Text>
-                    <Text fontWeight="medium" textTransform="capitalize">
-                      {opt}
-                    </Text>
-                  </Box>
-                </RadioCardLabel>
-              </RadioCardItem>
+                <Box display="flex" alignItems="center" gap="3" w="full">
+                  <Text
+                    color={selected ? 'green.fg' : 'fg.muted'}
+                    fontSize="xs"
+                    fontFamily="mono"
+                    textTransform="uppercase"
+                    letterSpacing="wider"
+                    w="5"
+                    flexShrink="0"
+                  >
+                    {label}.
+                  </Text>
+                  <Text fontWeight="medium" textTransform="capitalize">
+                    {opt}
+                  </Text>
+                </Box>
+              </Button>
             );
           })}
-        </RadioCard.Root>
+        </VStack>
       )}
 
       {rule.type === 'open_text' && (

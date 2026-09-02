@@ -152,21 +152,14 @@ async function extractNotes(zip: JSZip, slideNumber: number): Promise<string | n
   return text.length > 0 ? text : null;
 }
 
-export async function extractPptxSlides(file: File): Promise<ExtractedPresentation> {
-  const buffer = await file.arrayBuffer();
+export async function extractPptxSlides(buffer: ArrayBuffer, fileName: string): Promise<ExtractedPresentation> {
   const zip = await JSZip.loadAsync(buffer);
 
-  const slideFiles = Object.keys(zip.files)
-    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
-    .sort((a, b) => {
-      const na = Number(a.match(/slide(\d+)/i)?.[1] ?? 0);
-      const nb = Number(b.match(/slide(\d+)/i)?.[1] ?? 0);
-      return na - nb;
-    });
+  const slideFiles = listPptxSlideFiles(zip);
 
   const slides: ExtractedSlide[] = [];
   for (const name of slideFiles) {
-    const slideNumber = slides.length + 1;
+    const slideNumber = Number(name.match(/slide(\d+)/i)?.[1] ?? slides.length + 1);
     const xml = await zip.file(name)!.async('string');
     const doc = parser.parse(xml) as AnyRecord;
     const sld = doc['p:sld'] as AnyRecord | undefined;
@@ -193,11 +186,33 @@ export async function extractPptxSlides(file: File): Promise<ExtractedPresentati
 
   return {
     source: 'pptx',
-    fileName: file.name,
-    slideCount: slides.length,
+    fileName,
+    slideCount: slideFiles.length,
     extractedAt: now(),
     slides,
   };
+}
+
+/**
+ * Cheap, dependency-light slide counter for a `.pptx` (a zip of XML).
+ * A deck's real slide count is the number of `ppt/slides/slideN.xml` entries —
+ * one per slide regardless of whether it has any text — which is what the
+ * configure screen should show. Counting only zip entries avoids parsing every
+ * slide's XML just to learn the deck size.
+ */
+export async function countPptxSlides(buffer: ArrayBuffer): Promise<number> {
+  const zip = await JSZip.loadAsync(buffer);
+  return listPptxSlideFiles(zip).length;
+}
+
+function listPptxSlideFiles(zip: JSZip): string[] {
+  return Object.keys(zip.files)
+    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
+    .sort((a, b) => {
+      const na = Number(a.match(/slide(\d+)/i)?.[1] ?? 0);
+      const nb = Number(b.match(/slide(\d+)/i)?.[1] ?? 0);
+      return na - nb;
+    });
 }
 
 // Render the whole deck as a single Markdown document (one ## per slide).

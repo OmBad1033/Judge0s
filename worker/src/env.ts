@@ -24,4 +24,14 @@ export interface Env {
   // Analytics — OpenRouter LLM (theme clustering + sentiment for free text).
   OPENROUTER_API_KEY?: string;
   OPENROUTER_MODEL?: string;
+
+  // AI Slide Config — Phase 0 billing (Stripe). Optional in local dev; the
+  // billing routes return a clear "not configured" error when absent.
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PRICE_ID?: string;
+
+  // When true, gates are bypassed and every AI route acts as a paid plan.
+  // Local-dev convenience only; never set in production.
+  BILLING_BYPASS?: string;
 }

@@ -14,12 +14,12 @@ import {
   Field,
   FieldLabel,
   Flex,
-  Grid,
   Heading,
   HStack,
   Icon,
   Input,
   SimpleGrid,
+  Spinner,
   Text,
   VStack,
 } from '@chakra-ui/react';
@@ -27,6 +27,7 @@ import { ArrowRight, FileText, Plus, UploadCloud } from 'lucide-react';
 import { api, ApiError } from '../../api';
 import type { PresentationSummary } from '../../types';
 import { useToast } from '../../lib/toast';
+import { countSlidesInFile } from '../../lib/slideCount';
 import { PageHeader } from '../../components/ui/page-header';
 import { EmptyStateCard } from '../../components/ui/empty-state';
 import { StatusBadge } from '../../components/ui/status-badge';
@@ -39,8 +40,9 @@ export default function UploadPresentation() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
-  const [slideCount, setSlideCount] = useState('5');
   const [file, setFile] = useState<File | null>(null);
+  const [fileSlideCount, setFileSlideCount] = useState<number | null>(null);
+  const [counting, setCounting] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -52,6 +54,23 @@ export default function UploadPresentation() {
 
   const isPdf = file ? /\.pdf$/i.test(file.name) : false;
 
+  const onFileChosen = async (f: File | null) => {
+    setFile(f);
+    setUploadErr('');
+    if (f && /\.pptx$/i.test(f.name)) {
+      // Derive the deck size from the file itself — the admin never types it.
+      setCounting(true);
+      setFileSlideCount(null);
+      try {
+        setFileSlideCount(await countSlidesInFile(f));
+      } finally {
+        setCounting(false);
+      }
+    } else {
+      setFileSlideCount(null);
+    }
+  };
+
   const listQ = useQuery({
     queryKey: ['presentations'],
     queryFn: () => api.listPresentations().then((r) => r.presentations),
@@ -61,7 +80,6 @@ export default function UploadPresentation() {
     mutationFn: () =>
       api.createPresentation({
         title,
-        ...(isPdf ? {} : { slideCount: Number(slideCount) }),
         file: file!,
       }),
     onSuccess: (p) => {
@@ -69,8 +87,8 @@ export default function UploadPresentation() {
       queryClient.invalidateQueries({ queryKey: ['presentations'] });
       setOpen(false);
       setTitle('');
-      setSlideCount('5');
       setFile(null);
+      setFileSlideCount(null);
       navigate(`/admin/presentations/${p.id}/configure`);
     },
     onError: (e) => setUploadErr(e instanceof ApiError ? e.message : 'Upload failed'),
@@ -124,15 +142,15 @@ export default function UploadPresentation() {
       <UploadModal
         open={open}
         title={title}
-        slideCount={slideCount}
         file={file}
         isPdf={isPdf}
+        counting={counting}
+        fileSlideCount={fileSlideCount}
         busy={createMut.isPending}
         err={uploadErr}
         fileRef={fileRef}
         onTitle={setTitle}
-        onSlideCount={setSlideCount}
-        onFile={setFile}
+        onFile={onFileChosen}
         onClose={() => {
           if (createMut.isPending) return;
           setOpen(false);
@@ -200,33 +218,32 @@ function PresentationGrid({ items }: { items: PresentationSummary[] }) {
 function UploadModal({
   open,
   title,
-  slideCount,
   file,
   isPdf,
+  counting,
+  fileSlideCount,
   busy,
   err,
   fileRef,
   onTitle,
-  onSlideCount,
   onFile,
   onClose,
   onSubmit,
 }: {
   open: boolean;
   title: string;
-  slideCount: string;
   file: File | null;
   isPdf: boolean;
+  counting: boolean;
+  fileSlideCount: number | null;
   busy: boolean;
   err: string;
   fileRef: React.RefObject<HTMLInputElement>;
   onTitle: (v: string) => void;
-  onSlideCount: (v: string) => void;
   onFile: (f: File | null) => void;
   onClose: () => void;
   onSubmit: (e: FormEvent) => void;
 }) {
-  const showSlideCount = file !== null && !isPdf;
   return (
     <Dialog.Root open={open} onOpenChange={(e) => !busy && e.open === false && onClose()} size="lg">
       <DialogContent>
@@ -276,20 +293,21 @@ function UploadModal({
               />
             </Button>
 
-            {showSlideCount && (
-              <Field.Root required>
-                <FieldLabel fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
-                  Slide Count
-                </FieldLabel>
-                <Input
-                  type="number"
-                  min="1"
-                  value={slideCount}
-                  onChange={(e) => onSlideCount(e.target.value)}
-                  required
-                  size="lg"
-                />
-              </Field.Root>
+            {file && (
+              <Text color="fg.muted" fontSize="sm">
+                {counting ? (
+                  <HStack gap="2">
+                    <Spinner size="sm" />
+                    <span>Reading slide count…</span>
+                  </HStack>
+                ) : isPdf ? (
+                  'PDF — slide count is read from the file on upload.'
+                ) : fileSlideCount ? (
+                  `${fileSlideCount} slide${fileSlideCount === 1 ? '' : 's'} detected`
+                ) : (
+                  'Could not read slide count — it will be detected after upload.'
+                )}
+              </Text>
             )}
 
             {err && (
@@ -298,7 +316,7 @@ function UploadModal({
               </Text>
             )}
 
-            <Button type="submit" colorPalette="green" size="lg" mt="2" disabled={busy}>
+            <Button type="submit" colorPalette="green" size="lg" mt="2" disabled={busy || counting}>
               {busy ? 'Uploading…' : 'Upload & Configure'}
             </Button>
           </VStack>

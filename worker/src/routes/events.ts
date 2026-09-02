@@ -9,6 +9,8 @@ import * as exportService from '../services/exportService';
 import * as slideService from '../services/slideService';
 import { feedbackFieldsArraySchema } from '../validation/feedback';
 
+const MAX_FILE_BYTES = 400 * 1024 * 1024;
+
 const app = new Hono<{ Bindings: Env }>();
 
 const createEventSchema = z.object({
@@ -96,6 +98,7 @@ app.post('/:id/presentation', requireUser, async (c) => {
   if (!title) return c.json({ error: 'TITLE_REQUIRED' }, 400);
   if (file === null || typeof file === 'string') return c.json({ error: 'FILE_REQUIRED' }, 400);
   if (!/\.(pptx|pdf)$/i.test(file.name)) return c.json({ error: 'INVALID_FILE_TYPE' }, 400);
+  if (file.size > MAX_FILE_BYTES) return c.json({ error: 'FILE_TOO_LARGE' }, 400);
 
   // Slide count is derived from the uploaded file (PDF page count / PPTX slide
   // count); the optional form field is only used as a fallback override.
